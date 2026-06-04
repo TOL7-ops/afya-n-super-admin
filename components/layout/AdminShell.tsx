@@ -22,7 +22,8 @@ import { useModal } from '@/hooks/useModal';
 import { useFacilities } from '@/hooks/useFacilities';
 import { useDashboardAnalytics } from '@/hooks/useAnalytics';
 import { exportDashboardReport } from '@/services/analytics.service';
-import { convertTrial } from '@/services/licenses.service';
+import { convertTrial, issueLicense } from '@/services/licenses.service';
+import { extractAmountFromPlan } from '@/utils/planAmount';
 
 import type {
   ViewId,
@@ -171,6 +172,8 @@ export default function AdminShell() {
   const [editingFacility, setEditingFacility]   = useState<FacilityResponse | null>(null);
   // Track approved/rejected token IDs so we can remove them instantly from the list
   const [dismissedTokens, setDismissedTokens]   = useState<Set<string>>(new Set());
+  // Increment to force LicensesView to reload after issuing a license
+  const [licenseRefreshKey, setLicenseRefreshKey] = useState(0);
 
   // ─── Derived UI data from dashboard API ──────────────────────────────────
   const pendingApprovals = useMemo<PendingInstitution[]>(
@@ -383,7 +386,7 @@ export default function AdminShell() {
 
   // ─── Send onboarding email — calls POST /super-admin/institutions ─────────
   const handleEmailSent = useCallback(
-    async (data: PendingInstitutionData) => {
+    async (data: PendingInstitutionData): Promise<string | null> => {
       try {
         const payload: InstitutionCreatePayload = {
           name:         data.name,
@@ -397,9 +400,42 @@ export default function AdminShell() {
           notes:        data.notes || undefined,
         };
         await createFacility(payload);
+
+        // POST /super-admin/institutions returns {} — no token in response.
+        // Fetch the pending-approvals list and find the token for this institution
+        // by matching email or name. This is the only way to get the real token
+        // from the current API.
+        let realToken: string | null = null;
+        try {
+          const { default: apiClient } = await import('@/lib/api');
+          const dashRes = await apiClient.get<unknown>('/api/v1/super-admin/dashboard', {
+            params: { include: 'pending-approvals' },
+          });
+          const raw = dashRes.data as Record<string, unknown>;
+          const approvals = (
+            Array.isArray(raw['pending_approvals'])
+              ? raw['pending_approvals']
+              : []
+          ) as Array<Record<string, unknown>>;
+
+          // Match by email first, then name
+          const match = approvals.find(
+            (a) =>
+              (a['email'] as string | undefined)?.toLowerCase() === data.email.toLowerCase() ||
+              (a['name'] as string | undefined)?.toLowerCase() === data.name.toLowerCase(),
+          );
+          if (match) {
+            realToken = (match['token'] ?? match['setup_token'] ?? null) as string | null;
+            console.log('[CreateInstitution] Found real token for', data.name, '→', realToken);
+          }
+        } catch (tokenErr) {
+          console.warn('[CreateInstitution] Could not fetch real token (non-critical):', tokenErr);
+        }
+
         showToast(`✓ ${data.name} created — onboarding email sent to ${data.email}`, 'success');
         refetchFacilities();
         refetchDashboard();
+        return realToken;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Failed to create institution';
         showToast(`Error: ${msg}`, 'warn');
@@ -436,6 +472,7 @@ export default function AdminShell() {
   );
 
   // ─── Issue license — handled by LicensesView itself now ──────────────────
+  // ─── Issue license — calls POST /super-admin/licenses with full form data ──
   const handleIssueLicense = useCallback(
     async (data: IssueLicenseForm) => {
       if (!data.facilityId || !data.plan) {
@@ -443,14 +480,30 @@ export default function AdminShell() {
         return;
       }
       try {
-        await update(data.facilityId, { license_plan: data.plan });
-        showToast(`✓ License issued for ${data.institution}`, 'success');
+        // Find institution name from facilities list
+        const facility = facilities.find((f) => f.id === data.facilityId);
+        const institutionName = facility?.name ?? data.institution;
+
+        await issueLicense({
+          institution_name: institutionName,
+          plan:             data.plan,
+          start_date:       data.startDate || new Date().toISOString().split('T')[0],
+          seats:            data.seats ? Number(data.seats) : undefined,
+          payment_method:   data.paymentMethod || undefined,
+          notes:            data.notes || undefined,
+          amount:           extractAmountFromPlan(data.plan) || undefined,
+        });
+
+        showToast(`✓ License issued for ${institutionName}`, 'success');
         refetchFacilities();
-      } catch {
-        showToast('Failed to issue license — try again', 'warn');
+        setLicenseRefreshKey((k) => k + 1);
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } }).response?.status;
+        console.error('[IssueLicense] Failed:', status, err);
+        showToast(`Failed to issue license — try again`, 'warn');
       }
     },
-    [update, showToast, refetchFacilities],
+    [facilities, showToast, refetchFacilities],
   );
 
   // ─── Dashboard export ─────────────────────────────────────────────────────
@@ -516,6 +569,7 @@ export default function AdminShell() {
               onIssueLicense={issueLicenseModal.open}
               onConvertTrial={handleConvertTrial}
               onToast={showToast}
+              refreshKey={licenseRefreshKey}
             />
           </div>
 

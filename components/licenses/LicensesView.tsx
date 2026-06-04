@@ -18,6 +18,8 @@ interface LicensesViewProps {
   onIssueLicense: () => void;
   onConvertTrial: (id: string, name: string) => void;
   onToast: (msg: string, type?: ToastType) => void;
+  /** Increment this to force a data reload (e.g. after issuing a new license) */
+  refreshKey?: number;
 }
 
 function fmtDate(iso: string | null | undefined): string {
@@ -62,10 +64,13 @@ function licenseStatusVariant(
   return 'pending';
 }
 
+import { extractAmountFromPlan, cleanPlanLabel } from '@/utils/planAmount';
+
 export default function LicensesView({
   onIssueLicense,
   onConvertTrial,
   onToast,
+  refreshKey = 0,
 }: LicensesViewProps) {
   const [summary, setSummary]   = useState<LicenseSummaryResponse | null>(null);
   const [licenses, setLicenses] = useState<LicenseItem[]>([]);
@@ -125,7 +130,8 @@ export default function LicensesView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
+  // Reload whenever refreshKey changes (e.g. after issuing a new license)
+  useEffect(() => { loadAll(); }, [loadAll, refreshKey]);
 
   const handleRenew = async (lic: LicenseItem) => {
     try {
@@ -205,7 +211,7 @@ export default function LicensesView({
           <div className="kpi-ico">🔑</div>
           <div className="kpi-lbl">Active Licenses</div>
           <div className="kpi-val">{activeLicenses}</div>
-          <div className="kpi-sub">Across {licenses.length} institutions</div>
+          <div className="kpi-sub">Across {new Set(licenses.map(l => l.institution_name?.trim().toLowerCase())).size} institutions</div>
         </div>
         <div className="kpi">
           <div className="kpi-ico">⏰</div>
@@ -270,7 +276,7 @@ export default function LicensesView({
                   return (
                     <tr key={lic.id}>
                       <td style={{ fontWeight: 500 }}>{lic.institution_name}</td>
-                      <td style={{ fontSize: '.8rem' }}>{lic.plan}</td>
+                      <td style={{ fontSize: '.8rem' }}>{cleanPlanLabel(lic.plan)}</td>
                       <td className="mono">
                         {lic.seats != null ? `${lic.seats} seats` : '—'}
                       </td>
@@ -280,7 +286,12 @@ export default function LicensesView({
                         {fmtDate(expiryIso)}
                       </td>
                       <td className="mono" style={{ color: (lic.amount ?? 0) > 0 ? 'var(--green)' : 'var(--gray)' }}>
-                        {lic.amount != null ? `GHS ${lic.amount.toLocaleString()}` : '—'}
+                        {(() => {
+                          const amt = (lic.amount != null && lic.amount > 0)
+                            ? lic.amount
+                            : extractAmountFromPlan(lic.plan);
+                          return amt > 0 ? `GHS ${amt.toLocaleString()}` : '—';
+                        })()}
                       </td>
                       <td>
                         <Badge variant={statusKey}>{derivedStatus}</Badge>

@@ -192,7 +192,13 @@ export default function UsersView({ onToast }: UsersViewProps) {
                       </td>
                       <td style={{ fontSize: '.8rem' }}>{institutionName}</td>
                       <td style={{ fontSize: '.76rem' }}>{user.email}</td>
-                      <td className="id-cell">{fmtLastLogin(user.last_login)}</td>
+                      <td className="id-cell">{fmtLastLogin(
+                        user.last_login ??
+                        (user as Record<string, unknown>).last_login_at as string ??
+                        (user as Record<string, unknown>).last_seen as string ??
+                        (user as Record<string, unknown>).last_active as string ??
+                        null
+                      )}</td>
                       <td>
                         <Badge variant={isActive ? 'active' : 'suspended'}>
                           {isActive ? 'Active' : 'Suspended'}

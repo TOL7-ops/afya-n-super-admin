@@ -196,7 +196,6 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
         <div className="card" style={{ marginBottom: 0 }}>
           <div className="card-hdr">
             <div className="card-title">Monthly Revenue — Trend</div>
-            <div className="card-sub">From /api/v1/super-admin/revenue/monthly-trend</div>
           </div>
           <div className="card-body">
             {trendMonths.length === 0 ? (
@@ -258,7 +257,6 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
         <div className="card" style={{ marginBottom: 0 }}>
           <div className="card-hdr">
             <div className="card-title">Revenue by Institution Type</div>
-            <div className="card-sub">From /api/v1/super-admin/revenue/by-type</div>
           </div>
           <div className="card-body">
             {byTypeEntries.length === 0 ? (

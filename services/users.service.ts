@@ -10,7 +10,15 @@ import { unwrapArray } from '@/utils/unwrapArray';
 /** GET /api/v1/super-admin/users — facility name and last_login already resolved */
 export async function listUsers(): Promise<UserResponse[]> {
   const res = await api.get<unknown>('/api/v1/super-admin/users');
-  return unwrapArray<UserResponse>(res.data, 'Users');
+  const users = unwrapArray<UserResponse>(res.data, 'Users');
+  if (users.length > 0) {
+    const raw = users[0] as Record<string, unknown>;
+    console.log('[Users] ALL fields in raw[0]:', JSON.stringify(raw, null, 2));
+    // Specifically look for any date-like fields
+    const dateFields = Object.entries(raw).filter(([, v]) => typeof v === 'string' && v.includes('T'));
+    console.log('[Users] Date fields:', dateFields.map(([k, v]) => `${k}: ${v}`));
+  }
+  return users;
 }
 
 /** GET /api/v1/super-admin/users/{id} */

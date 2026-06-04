@@ -10,7 +10,7 @@ import {
   rejectInstitution,
   extendTrial,
 } from '@/services/institutions.service';
-import type { FacilityResponse, InstitutionCreatePayload } from '@/types/api';
+import type { FacilityResponse, InstitutionCreatePayload, InstitutionCreateResponse } from '@/types/api';
 
 export interface UseFacilitiesReturn {
   facilities: FacilityResponse[];
@@ -67,8 +67,46 @@ export function useFacilities(): UseFacilitiesReturn {
   }, [fetchAll]);
 
   const suspend = useCallback(async (id: number, isActive: boolean) => {
-    const updated = await updateInstitutionStatus(id, isActive);
-    setFacilities((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+    // Optimistic update — flip status immediately for instant UI feedback
+    setFacilities((prev) =>
+      prev.map((f) =>
+        f.id === id
+          ? { ...f, is_active: isActive, status: isActive ? 'Active' : 'Suspended' }
+          : f,
+      ),
+    );
+    try {
+      const updated = await updateInstitutionStatus(id, isActive);
+      // Merge API response onto the existing object so display fields are preserved.
+      // The PATCH /status response only returns core fields, not field_workers_count
+      // total_screened, license_expiry etc. We keep those from local state.
+      setFacilities((prev) =>
+        prev.map((f) => {
+          if (f.id !== id) return f;
+          return {
+            ...f,                          // existing display fields
+            ...updated,                    // server truth for is_active, status, etc.
+            // Re-pin display-only fields that the PATCH response strips out
+            field_workers_count: f.field_workers_count,
+            total_screened:      f.total_screened,
+            license_expiry:      f.license_expiry      ?? updated.license_expiry,
+            license_expires_at:  f.license_expires_at  ?? updated.license_expires_at,
+            type:                f.type                ?? updated.type,
+            region:              f.region              ?? updated.region,
+          };
+        }),
+      );
+    } catch (err) {
+      // Revert optimistic update — restore previous state
+      setFacilities((prev) =>
+        prev.map((f) =>
+          f.id === id
+            ? { ...f, is_active: !isActive, status: !isActive ? 'Active' : 'Suspended' }
+            : f,
+        ),
+      );
+      throw err;
+    }
   }, []);
 
   const approve = useCallback(async (id: number) => {
@@ -114,7 +152,14 @@ export function useFacilities(): UseFacilitiesReturn {
       if (body.seats != null) mapped.seats = body.seats;
 
       const updated = await updateInstitution(id, mapped);
-      setFacilities((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+      // Merge onto existing — preserve display-only fields the PUT doesn't return
+      setFacilities((prev) =>
+        prev.map((f) =>
+          f.id === id
+            ? { ...f, ...updated, field_workers_count: f.field_workers_count, total_screened: f.total_screened }
+            : f,
+        ),
+      );
       return updated;
     },
     [],

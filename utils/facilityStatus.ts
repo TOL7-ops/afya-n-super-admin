@@ -22,10 +22,11 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 export function getFacilityStatus(f: FacilityResponse): FacilityStatus {
   // If the API returns a status string directly, trust it first
   if (f.status) {
-    const s = f.status.toLowerCase();
-    if (s === 'suspended') return 'Suspended';
+    const s = f.status.toLowerCase().trim();
+    if (s === 'suspended' || s === 'inactive' || s === 'disabled') return 'Suspended';
     if (s === 'pending')   return 'Pending';
     if (s === 'trial')     return 'Trial';
+    if (s === 'expiring')  return 'Expiring';
     // For Active, still check expiry to decide Active vs Expiring
     if (s === 'active') {
       const expiryIso = f.license_expiry ?? f.license_expires_at;
@@ -40,7 +41,8 @@ export function getFacilityStatus(f: FacilityResponse): FacilityStatus {
   }
 
   // Fallback: derive from is_active + license_plan + expiry
-  if (!f.is_active) return 'Suspended';
+  // is_active = false always means Suspended regardless of plan
+  if (f.is_active === false) return 'Suspended';
 
   const plan = ((f.license_plan ?? f.plan) ?? '').toLowerCase().trim();
 

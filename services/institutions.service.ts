@@ -6,6 +6,7 @@ import api from '@/lib/api';
 import type {
   FacilityResponse,
   InstitutionCreatePayload,
+  InstitutionCreateResponse,
 } from '@/types/api';
 import { unwrapArray } from '@/utils/unwrapArray';
 
@@ -25,7 +26,11 @@ export async function listInstitutions(
     '/api/v1/super-admin/institutions',
     { params: { page: 1, page_size: 200, ...params } },
   );
-  return unwrapArray<FacilityResponse>(res.data, 'Institutions');
+  const institutions = unwrapArray<FacilityResponse>(res.data, 'Institutions');
+  if (institutions.length > 0) {
+    console.log('[Institutions] ALL fields in raw[0]:', JSON.stringify(institutions[0], null, 2));
+  }
+  return institutions;
 }
 
 /** GET /api/v1/super-admin/institutions/{id} */
@@ -37,10 +42,11 @@ export async function getInstitution(id: number): Promise<FacilityResponse> {
 /**
  * POST /api/v1/super-admin/institutions
  * Body: { name, type, region, contact_name, email, phone, license_plan, seats, notes }
+ * Returns the created institution including the `setup_token` the backend emailed to the admin.
  */
 export async function createInstitution(
   payload: InstitutionCreatePayload,
-): Promise<FacilityResponse> {
+): Promise<InstitutionCreateResponse> {
   // Map legacy admin_name/admin_email fields if present
   const body: Record<string, unknown> = { ...payload };
   if ('admin_name' in body && !body.contact_name) {
@@ -56,7 +62,7 @@ export async function createInstitution(
     body.phone = body.contact_number;
     delete body.contact_number;
   }
-  const res = await api.post<FacilityResponse>('/api/v1/super-admin/institutions', body);
+  const res = await api.post<InstitutionCreateResponse>('/api/v1/super-admin/institutions', body);
   return res.data;
 }
 

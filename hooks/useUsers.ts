@@ -43,8 +43,36 @@ export function useUsers(): UseUsersReturn {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const doUpdateStatus = useCallback(async (id: number, isActive: boolean) => {
-    const updated = await updateUserStatus(id, isActive);
-    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+    // Optimistic update — flip is_active instantly
+    setUsers((prev) =>
+      prev.map((u) => (u.id === id ? { ...u, is_active: isActive } : u)),
+    );
+    try {
+      const updated = await updateUserStatus(id, isActive);
+      // Merge response onto existing — preserve display fields the PATCH may not return
+      // (facility_name, last_login, role, email etc.)
+      setUsers((prev) =>
+        prev.map((u) => {
+          if (u.id !== id) return u;
+          return {
+            ...u,                              // existing display fields
+            ...updated,                        // server truth
+            // Re-pin fields the PATCH response may strip
+            facility_name: u.facility_name   ?? updated.facility_name,
+            last_login:    u.last_login       ?? updated.last_login,
+            full_name:     u.full_name        || updated.full_name,
+            email:         u.email            || updated.email,
+            role:          u.role             || updated.role,
+          };
+        }),
+      );
+    } catch (err) {
+      // Revert on failure
+      setUsers((prev) =>
+        prev.map((u) => (u.id === id ? { ...u, is_active: !isActive } : u)),
+      );
+      throw err;
+    }
   }, []);
 
   const register = useCallback(

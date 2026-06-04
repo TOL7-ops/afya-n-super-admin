@@ -8,8 +8,13 @@ interface EmailPreviewModalProps {
   onClose: () => void;
   emailData: EmailPreviewData | null;
   pendingData: PendingInstitutionData | null;
-  /** Called when the user clicks Send — can be async and may throw on API error */
-  onSent: (data: PendingInstitutionData) => Promise<void> | void;
+  /**
+   * Called when the user clicks Send.
+   * Returns the real setup_token from the API response (or null if backend
+   * doesn't include it yet), so we can update the CTA link in the preview.
+   * May throw on API error.
+   */
+  onSent: (data: PendingInstitutionData) => Promise<string | null>;
 }
 
 interface ProgressStep {
@@ -45,6 +50,13 @@ export default function EmailPreviewModal({
   const [stepStates, setStepStates] = useState<Record<string, StepState>>({});
   const [delivered, setDelivered] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  // Real token returned by the API after institution is created
+  const [realToken, setRealToken] = useState<string | null>(null);
+
+  // CTA link: once we have the real token, embed it so the facility's link auto-fills the token field
+  const setupUrl = realToken
+    ? `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/onboarding?token=${encodeURIComponent(realToken)}`
+    : 'http://localhost:3000/onboarding';
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).classList.contains('email-modal-overlay')) onClose();
@@ -57,6 +69,7 @@ export default function EmailPreviewModal({
     setStepStates({});
     setDelivered(false);
     setSendError(null);
+    setRealToken(null);
 
     // Animate steps 1–4 while the API call runs in parallel
     const animateUntilSend = async () => {
@@ -71,10 +84,13 @@ export default function EmailPreviewModal({
     };
 
     try {
-      await Promise.all([
+      const [, token] = await Promise.all([
         animateUntilSend(),
-        onSent(pendingData), // real API call
+        onSent(pendingData), // real API call — returns setup_token
       ]);
+
+      // Store the real token so the CTA link updates
+      if (token) setRealToken(token);
 
       // All done — mark final step
       setStepStates((prev) => ({
@@ -92,6 +108,7 @@ export default function EmailPreviewModal({
       setDelivered(false);
       setFillPct(0);
       setStepStates({});
+      setRealToken(null);
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Something went wrong';
@@ -160,39 +177,72 @@ export default function EmailPreviewModal({
               </div>
               <p className="er-text">
                 Your organisation, <strong>{emailData.orgName}</strong>, has been set up on the
-                Afya hypertension screening platform. You can now access your dashboard, create
-                field worker accounts, and begin conducting community screenings.
+                Afya hypertension screening platform. Follow the steps below to activate your
+                account and access your dashboard.
               </p>
-              <div className="er-cta-wrap">
-                <a className="er-cta" href="#">Set Up Your Account →</a>
-              </div>
-              <p className="er-text" style={{ fontSize: '.78rem', color: '#888', textAlign: 'center', marginTop: '-8px' }}>
-                This link expires in <strong>72 hours</strong>. If it expires, contact{' '}
-                <a href="mailto:support@afya.health" style={{ color: 'var(--red)' }}>support@afya.health</a>.
-              </p>
+
               <div className="er-divider" />
-              <div className="er-steps-title">Your next 3 steps after logging in:</div>
+              <div className="er-steps-title">How to activate your account:</div>
               {[
-                { n: 1, title: 'Set your password',               desc: "— choose a secure password to protect your patients' data." },
-                { n: 2, title: 'Create field worker accounts',    desc: '— add the nurses, CHWs, and outreach officers who will conduct screenings.' },
-                { n: 3, title: 'Set up your first screening event', desc: "— name it, assign your team, and you're ready to screen." },
+                {
+                  n: 1,
+                  title: 'Verify your token',
+                  desc: '— click the button below, enter your email address, and paste your one-time setup token to confirm it\'s really you.',
+                },
+                {
+                  n: 2,
+                  title: 'Set your password',
+                  desc: "— choose a secure password to protect your organisation's data.",
+                },
+                {
+                  n: 3,
+                  title: 'Confirm your organisation',
+                  desc: '— review your facility details and confirm everything looks correct.',
+                },
+                {
+                  n: 4,
+                  title: 'Log in to the Facility Portal',
+                  desc: '— you\'ll be taken directly to afya-portal.vercel.app/facility to sign in with your registered email and new password.',
+                },
               ].map((step) => (
                 <div key={step.n} className="er-step">
                   <div className="er-step-num">{step.n}</div>
                   <div className="er-step-text"><strong>{step.title}</strong> {step.desc}</div>
                 </div>
               ))}
+
+              {/* Primary CTA — token verification, not the portal */}
+              <div className="er-cta-wrap" style={{ marginTop: '20px' }}>
+                <a className="er-cta" href={setupUrl} target="_blank" rel="noopener noreferrer">
+                  Set Up Your Account →
+                </a>
+              </div>
+              <p className="er-text" style={{ fontSize: '.78rem', color: '#888', textAlign: 'center', marginTop: '-8px' }}>
+                This link expires in <strong>72 hours</strong>. If it expires, contact{' '}
+                <a href="mailto:support@afya.health" style={{ color: 'var(--red)' }}>support@afya.health</a>.
+              </p>
+
+              <div className="er-divider" />
+              <div className="er-steps-title">Your one-time setup token:</div>
+              <div className="er-token-box">
+                <div className="er-token">{emailData.token}</div>
+                <div className="er-token-note">
+                  Enter this token on the verification page together with your email address.
+                  Keep it private — it is valid for one use only.
+                </div>
+              </div>
+
               <div className="er-divider" />
               <div className="er-steps-title">Your account details:</div>
               <div className="er-info-box">
                 {[
-                  { label: 'Organisation',      value: emailData.infoOrg    },
-                  { label: 'Type',              value: emailData.infoType   },
-                  { label: 'Region',            value: emailData.infoRegion },
-                  { label: 'Login Email',       value: emailData.infoEmail  },
-                  { label: 'Licence Plan',      value: emailData.infoPlan   },
-                  { label: 'Field Worker Seats', value: emailData.infoSeats },
-                  { label: 'Licence Expires',   value: emailData.infoExpiry },
+                  { label: 'Organisation',       value: emailData.infoOrg    },
+                  { label: 'Type',               value: emailData.infoType   },
+                  { label: 'Region',             value: emailData.infoRegion },
+                  { label: 'Login Email',        value: emailData.infoEmail  },
+                  { label: 'Licence Plan',       value: emailData.infoPlan   },
+                  { label: 'Field Worker Seats', value: emailData.infoSeats  },
+                  { label: 'Licence Expires',    value: emailData.infoExpiry },
                 ].map((row) => (
                   <div key={row.label} className="er-info-row">
                     <span className="er-info-lbl">{row.label}</span>
@@ -200,12 +250,27 @@ export default function EmailPreviewModal({
                   </div>
                 ))}
               </div>
-              <div className="er-steps-title" style={{ marginTop: '20px' }}>Your one-time setup token:</div>
-              <div className="er-token-box">
-                <div className="er-token">{emailData.token}</div>
-                <div className="er-token-note">Keep this private. Used only for initial account setup.</div>
+
+              {/* Secondary CTA — facility portal login, shown AFTER setup is complete */}
+              <div className="er-divider" />
+              <div className="er-steps-title">Already set up? Log in here:</div>
+              <p className="er-text" style={{ fontSize: '.8rem', color: '#888', marginBottom: '10px' }}>
+                Once you have completed the steps above and set your password, use this button to
+                go directly to the Facility Portal.
+              </p>
+              <div className="er-cta-wrap">
+                <a
+                  className="er-cta"
+                  href="https://afya-portal.vercel.app/facility"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ background: '#1a1a2e' }}
+                >
+                  Go to Facility Portal →
+                </a>
               </div>
-              <p className="er-text" style={{ marginTop: '16px' }}>
+
+              <p className="er-text" style={{ marginTop: '20px' }}>
                 If you have any questions, reply to this email or reach us on WhatsApp:{' '}
                 <strong>+233 XX XXXX XXXX</strong>.
               </p>

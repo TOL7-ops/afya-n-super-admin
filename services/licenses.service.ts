@@ -20,7 +20,17 @@ export async function getLicensesSummary(): Promise<LicenseSummaryResponse> {
 /** GET /api/v1/super-admin/licenses */
 export async function listLicenses(): Promise<LicenseItem[]> {
   const res = await api.get<unknown>('/api/v1/super-admin/licenses');
-  return unwrapArray<LicenseItem>(res.data, 'Licenses');
+  const raw = unwrapArray<LicenseItem>(res.data, 'Licenses');
+
+  // De-duplicate by license id — the API can return the same record more than
+  // once (e.g. pagination artefacts or multiple-status rows per institution).
+  const seen = new Map<number, LicenseItem>();
+  for (const item of raw) {
+    if (!seen.has(item.id)) {
+      seen.set(item.id, item);
+    }
+  }
+  return Array.from(seen.values());
 }
 
 /**

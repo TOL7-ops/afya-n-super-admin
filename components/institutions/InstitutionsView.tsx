@@ -154,6 +154,7 @@ export default function InstitutionsView({
                 <th>Institution</th>
                 <th>Type</th>
                 <th>Region</th>
+                <th>Seats</th>
                 <th>Field Workers</th>
                 <th>Total Screened</th>
                 <th>License Expires</th>
@@ -165,7 +166,7 @@ export default function InstitutionsView({
               {filtered.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     style={{
                       textAlign: 'center', padding: '24px',
                       fontFamily: "'JetBrains Mono',monospace",
@@ -178,9 +179,10 @@ export default function InstitutionsView({
               ) : (
                 filtered.map((f) => {
                   const status = facilityStatusLabel(f);
-                  const type   = f.type ?? '—';
-                  const fieldWorkers = f.field_workers_count ?? null;
-                  const totalScreened = f.total_screened ?? null;
+                  const type          = f.type ?? '—';
+                  const fieldWorkers  = f.field_workers_count ?? 0;
+                  const totalScreened = f.total_screened ?? 0;
+                  const seats         = f.seats ?? f.max_seats ?? null;
                   // API returns license_expiry; fall back to license_expires_at
                   const expiryIso = f.license_expiry ?? f.license_expires_at;
                   const expiry = expiryIso
@@ -199,10 +201,13 @@ export default function InstitutionsView({
                       </td>
                       <td>{f.region ?? '—'}</td>
                       <td className="mono">
-                        {fieldWorkers != null ? fieldWorkers : '—'}
+                        {seats != null ? seats : '—'}
                       </td>
                       <td className="mono">
-                        {totalScreened != null ? totalScreened.toLocaleString() : '—'}
+                        {fieldWorkers}
+                      </td>
+                      <td className="mono">
+                        {totalScreened.toLocaleString()}
                       </td>
                       <td className="id-cell">{expiry}</td>
                       <td>

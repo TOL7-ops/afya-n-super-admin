@@ -45,6 +45,18 @@ export interface InstitutionCreatePayload {
   notes?: string | null;
 }
 
+/**
+ * Extended response from POST /api/v1/super-admin/institutions.
+ * The backend includes `setup_token` in the creation response so the super admin
+ * can display (and log) the real token that was emailed to the institution.
+ */
+export interface InstitutionCreateResponse extends FacilityResponse {
+  /** One-time setup token emailed to the institution admin, e.g. "AFYA-AB12-CD34-EF56" */
+  setup_token?: string | null;
+  /** URL the admin should visit to complete onboarding (may be returned by backend) */
+  setup_url?: string | null;
+}
+
 /** Keep old alias for compatibility */
 export type FacilityCreateWithoutUser = InstitutionCreatePayload & {
   /** Legacy alias — maps to contact_name on the API */
@@ -135,6 +147,7 @@ export interface IssueLicensePayload {
   seats?: number | null;
   payment_method?: string | null;
   notes?: string | null;
+  amount?: number | null;
 }
 
 /** Payload for POST /api/v1/super-admin/licenses/{id}/convert-trial */
@@ -291,8 +304,13 @@ export interface UserResponse {
   is_active: boolean;
   facility_id: number | null;
   facility_name: string | null;
+  // Last login — API may use any of these field names
   last_login: string | null;
+  last_login_at?: string | null;
+  last_seen?: string | null;
+  last_active?: string | null;
   created_at: string;
+  [key: string]: unknown;
 }
 
 // ─── Audit Log ────────────────────────────────────────────────────────────────
