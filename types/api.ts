@@ -1,11 +1,14 @@
 /**
  * TypeScript interfaces mirroring the Afya super-admin API response schemas.
  * All paths under /api/v1/super-admin/*
+ *
+ * BREAKING CHANGE (June 2026): All IDs are now UUID strings.
+ * id, facility_id, user_id, institution_id, patient_id are all string (UUID).
  */
 
 // ─── Facilities / Institutions ────────────────────────────────────────────────
 export interface FacilityResponse {
-  id: number;
+  id: string;                          // UUID
   name: string;
   type: string | null;
   address: string | null;
@@ -25,11 +28,17 @@ export interface FacilityResponse {
   seats: number | null;
   max_seats: number | null;
   active_seats: number | null;
-  field_workers_count: number | null;  // from /super-admin/institutions
+  field_workers_count: number | null;
   seat_utilization_percent: number | null;
   // Screening
-  total_screened: number | null;       // from /super-admin/institutions
+  total_screened: number | null;
   notes: string | null;
+  /**
+   * Tagged by the frontend store after merging the two API responses.
+   * 'institution' = NGO/programme (GET /super-admin/institutions)
+   * 'facility'    = clinical facility (GET /super-admin/facilities)
+   */
+  _entity_type?: 'institution' | 'facility';
 }
 
 /** Payload for POST /api/v1/super-admin/institutions */
@@ -45,29 +54,36 @@ export interface InstitutionCreatePayload {
   notes?: string | null;
 }
 
-/**
- * Extended response from POST /api/v1/super-admin/institutions.
- * The backend includes `setup_token` in the creation response so the super admin
- * can display (and log) the real token that was emailed to the institution.
- */
+/** Extended response from POST /api/v1/super-admin/institutions */
 export interface InstitutionCreateResponse extends FacilityResponse {
-  /** One-time setup token emailed to the institution admin, e.g. "AFYA-AB12-CD34-EF56" */
   setup_token?: string | null;
-  /** URL the admin should visit to complete onboarding (may be returned by backend) */
   setup_url?: string | null;
 }
 
 /** Keep old alias for compatibility */
 export type FacilityCreateWithoutUser = InstitutionCreatePayload & {
-  /** Legacy alias — maps to contact_name on the API */
   admin_name?: string;
-  /** Legacy alias — maps to email on the API */
   admin_email?: string;
   address?: string | null;
   contact_number?: string | null;
 };
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
+
+/**
+ * New unified dashboard response.
+ * GET /api/v1/super-admin/dashboard returns all widgets in one object.
+ * Use ?include=summary,screenings_trend,... to limit which widgets are returned.
+ */
+export interface DashboardResponse {
+  summary?: DashboardSummaryResponse | null;
+  screenings_trend?: ScreeningsTrendResponse | null;
+  bp_distribution?: BpDistributionResponse | null;
+  pending_approvals?: PendingApprovalItem[] | null;
+  top_institutions?: TopInstitutionItem[] | null;
+  [key: string]: unknown;
+}
+
 export interface DashboardSummaryResponse {
   active_institutions: number;
   institutions_increment: number;
@@ -88,21 +104,26 @@ export interface BpDistributionResponse {
 }
 
 export interface PendingApprovalItem {
-  id: string | number;          // API returns string token e.g. "token-2"
+  id: string | number;
   name: string;
   type: string | null;
   region: string | null;
-  contact_person: string | null;  // API field name
-  contact_name?: string | null;   // legacy alias
-  requested_date: string | null;  // API field name
-  created_at?: string | null;     // legacy alias
-  requested_plan: string | null;  // API field name
-  license_plan?: string | null;   // legacy alias
+  contact_person: string | null;
+  contact_name?: string | null;
+  phone?: string | null;
+  contact_number?: string | null;
+  email?: string | null;
+  requested_date: string | null;
+  created_at?: string | null;
+  requested_plan: string | null;
+  license_plan?: string | null;
+  facility_id?: string | null;      // UUID
+  institution_id?: string | null;   // UUID
   [key: string]: unknown;
 }
 
 export interface TopInstitutionItem {
-  id: number;
+  id: string;                       // UUID
   name: string;
   type: string | null;
   field_workers: number;
@@ -123,14 +144,14 @@ export interface LicenseSummaryResponse {
 }
 
 export interface LicenseItem {
-  id: number;
+  id: string;                        // UUID
   institution_name: string;
-  institution_id?: number;
+  institution_id?: string;           // UUID
   plan: string;
   seats: number | null;
   start_date: string | null;
   expires_at: string | null;
-  expiry_date?: string | null;   // legacy alias
+  expiry_date?: string | null;
   amount: number | null;
   is_active: boolean;
   status?: string | null;
@@ -162,7 +183,6 @@ export interface AnalyticsSummaryResponse {
   high_bp_detections: number;
   referrals: number;
   follow_up_completions: number;
-  // Legacy fields — kept for any downstream compatibility
   total_referred?: number;
   referral_rate?: number;
   active_adherence_patients?: number;
@@ -172,7 +192,6 @@ export interface AnalyticsSummaryResponse {
 }
 
 export interface AnalyticsBreakdownsResponse {
-  // API returns these exact keys
   regional: Array<{
     region: string;
     screenings: number;
@@ -193,7 +212,7 @@ export interface AnalyticsBreakdownsResponse {
     month: string;
     normal: number;
     elevated: number;
-    high: number;      // API uses "high" not "stage12"
+    high: number;
     crisis: number;
     [key: string]: unknown;
   }> | null;
@@ -206,10 +225,8 @@ export interface AnalyticsBreakdownsResponse {
 }
 
 export interface InstitutionPerformanceItem {
-  // API may use either field name
   institution_name: string | null;
   name?: string | null;
-  // Numeric fields — all nullable
   screened: number | null;
   total_screened?: number | null;
   high_bp: number | null;
@@ -225,37 +242,42 @@ export interface InstitutionPerformanceItem {
   [key: string]: unknown;
 }
 
-// Legacy types — kept for compatibility
-export interface AnalyticsTimelineEntry {
-  date: string;
-  count: number;
-}
+// Legacy analytics types
+export interface AnalyticsTimelineEntry { date: string; count: number; }
 export interface AnalyticsTimelineResponse {
-  period: string;
-  from_date: string;
-  timeline: AnalyticsTimelineEntry[];
-  total_in_period: number;
+  period: string; from_date: string;
+  timeline: AnalyticsTimelineEntry[]; total_in_period: number;
   [key: string]: unknown;
 }
 export interface AnalyticsAdherenceResponse {
-  enrolled_patients: number;
-  total_logs_all_time: number;
-  logs_last_7_days: number;
-  adherence_rate_7d_percent: number;
-  daily_breakdown: number[];
-  [key: string]: unknown;
+  enrolled_patients: number; total_logs_all_time: number;
+  logs_last_7_days: number; adherence_rate_7d_percent: number;
+  daily_breakdown: number[]; [key: string]: unknown;
 }
 export interface AnalyticsReferralsResponse {
-  total_screened: number;
-  total_referred: number;
-  converted_to_intake: number;
-  conversion_rate_percent: number;
-  lost_to_followup: number;
-  opted_out: number;
+  total_screened: number; total_referred: number;
+  converted_to_intake: number; conversion_rate_percent: number;
+  lost_to_followup: number; opted_out: number;
   [key: string]: unknown;
 }
 
 // ─── Revenue ──────────────────────────────────────────────────────────────────
+
+/**
+ * New unified revenue response from GET /api/v1/analytics/revenue.
+ * Replaces the 4 separate revenue endpoints.
+ */
+export interface RevenueAnalyticsResponse {
+  total_revenue: number;
+  revenue_this_month: number;
+  renewals_due_30_days: number;
+  annual_run_rate: number;
+  monthly_trend: { months: string[]; revenue: number[] } | null;
+  revenue_by_type: Record<string, number> | null;
+  [key: string]: unknown;
+}
+
+/** Legacy — kept for backward compatibility with existing callers */
 export interface RevenueSummaryResponse {
   ARR: number;
   MRR: number;
@@ -278,15 +300,14 @@ export interface RevenueByTypeResponse {
 }
 
 export interface RevenueTransactionItem {
-  id: number;
+  id: string;                          // UUID
   institution_name: string | null;
   amount: number | null;
-  paid_at: string | null;            // actual field name
-  payment_date?: string | null;      // alias
+  paid_at: string | null;
+  payment_date?: string | null;
   payment_method: string | null;
   status: string | null;
   invoice_number: string | null;
-  // These are NOT in the API response — enriched client-side from licenses list
   type?: string | null;
   plan?: string | null;
   period?: string | null;
@@ -297,14 +318,13 @@ export interface RevenueTransactionItem {
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 export interface UserResponse {
-  id: number;
+  id: string;                          // UUID
   email: string;
   full_name: string;
   role: string;
   is_active: boolean;
-  facility_id: number | null;
+  facility_id: string | null;          // UUID
   facility_name: string | null;
-  // Last login — API may use any of these field names
   last_login: string | null;
   last_login_at?: string | null;
   last_seen?: string | null;
@@ -315,7 +335,7 @@ export interface UserResponse {
 
 // ─── Audit Log ────────────────────────────────────────────────────────────────
 export interface AuditLogEntry {
-  id: number;
+  id: string;                          // UUID
   agent_name: string | null;
   action: string;
   details: string | null;
@@ -325,8 +345,8 @@ export interface AuditLogEntry {
 
 /** Legacy alias used by old hooks */
 export type AgentActivityLogResponse = AuditLogEntry & {
-  agent_id?: number;
-  patient_id?: number | null;
+  agent_id?: string;                   // UUID
+  patient_id?: string | null;          // UUID
 };
 
 // ─── Settings ─────────────────────────────────────────────────────────────────

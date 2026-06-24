@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Badge from '@/components/shared/Badge';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useUsers } from '@/hooks/useUsers';
+import { useFacilities } from '@/hooks/useFacilities';
 import type { ToastType } from '@/types';
 import type { UserResponse } from '@/types/api';
 
@@ -43,7 +44,8 @@ function fmtLastLogin(iso: string | null | undefined): string {
 // UsersView no longer receives facilities prop — institution name comes from API
 export default function UsersView({ onToast }: UsersViewProps) {
   const { users, loading, error, updateStatus } = useUsers();
-  const [search, setSearch]       = useState('');
+  const { facilities } = useFacilities();
+  const [search, setSearch]         = useState('');
   const [roleFilter, setRoleFilter] = useState('');
 
   const filtered = users.filter((u: UserResponse) => {
@@ -57,7 +59,7 @@ export default function UsersView({ onToast }: UsersViewProps) {
     return matchQ && matchR;
   });
 
-  const handleSuspend = async (id: number, name: string) => {
+  const handleSuspend = async (id: string, name: string) => {
     try {
       await updateStatus(id, false);
       onToast(`${name} suspended`, 'warn');
@@ -66,7 +68,7 @@ export default function UsersView({ onToast }: UsersViewProps) {
     }
   };
 
-  const handleReactivate = async (id: number, name: string) => {
+  const handleReactivate = async (id: string, name: string) => {
     try {
       await updateStatus(id, true);
       onToast(`✓ ${name} reactivated`, 'success');
@@ -104,7 +106,7 @@ export default function UsersView({ onToast }: UsersViewProps) {
       <div className="pg-hdr">
         <div>
           <div className="pg-title">All Users</div>
-          <div className="pg-sub">Every account on the Afya platform across all institutions</div>
+          <div className="pg-sub">Every account on the Afya platform across all organizations</div>
         </div>
       </div>
 
@@ -148,7 +150,7 @@ export default function UsersView({ onToast }: UsersViewProps) {
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div className="tbl-scroll">
           <table className="tbl">
             <thead>
               <tr>

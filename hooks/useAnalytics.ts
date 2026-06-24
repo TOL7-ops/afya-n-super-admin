@@ -2,18 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  getDashboardSummary,
-  getScreeningsTrend,
-  getBpDistribution,
-  getPendingApprovals,
-  getTopInstitutions,
+  getDashboard,
   getAnalyticsSummary,
   getAnalyticsBreakdowns,
   getInstitutionsPerformance,
 } from '@/services/analytics.service';
+import { getAccessToken } from '@/services/authService';
 import type {
   DashboardSummaryResponse,
-  ScreeningsTrendResponse,
   BpDistributionResponse,
   PendingApprovalItem,
   TopInstitutionItem,
@@ -62,57 +58,49 @@ export function useDashboardAnalytics(): UseDashboardAnalyticsReturn {
     setLoading(true);
     setError(null);
     try {
-      // Use allSettled so a single slow/failing endpoint doesn't block the whole dashboard
-      const [summaryRes, trendRes, bpDistRes, pendingRes, topRes] = await Promise.allSettled([
-        getDashboardSummary(),
-        getScreeningsTrend(),
-        getBpDistribution(),
-        getPendingApprovals(),
-        getTopInstitutions(),
-      ]);
+      // Single call to the unified dashboard endpoint (BC June 2026).
+      const raw = await getDashboard();
 
-      // Extract values with safe fallbacks for any rejected promises
-      const summary = summaryRes.status === 'fulfilled' ? summaryRes.value : null;
-      const trend   = trendRes.status   === 'fulfilled' ? trendRes.value   : null;
-      const bpDist  = bpDistRes.status  === 'fulfilled' ? bpDistRes.value  : null;
-      const pending = pendingRes.status === 'fulfilled' ? pendingRes.value  : [];
-      const top     = topRes.status     === 'fulfilled' ? topRes.value      : [];
+      console.log('[Dashboard] Raw response keys:', Object.keys(raw));
+      console.log('[Dashboard] Raw response:', JSON.stringify(raw).slice(0, 500));
 
-      // Log any failures for debugging
-      [summaryRes, trendRes, bpDistRes, pendingRes, topRes].forEach((r, i) => {
-        if (r.status === 'rejected') {
-          const names = ['summary', 'trend', 'bp-dist', 'pending', 'top'];
-          console.warn(`[Dashboard] ${names[i]} failed:`, r.reason);
-        }
-      });
+      // The API may return data nested under a "summary" key OR flat at the top level.
+      // Handle both shapes.
+      const summary = (raw.summary ?? raw) as Record<string, unknown>;
+      const trend   = raw.screenings_trend ?? (raw as Record<string, unknown>).screenings_trend ?? null;
+      const bpDist  = raw.bp_distribution  ?? (raw as Record<string, unknown>).bp_distribution  ?? null;
+      const pending = (raw.pending_approvals ?? (raw as Record<string, unknown>).pending_approvals ?? []) as typeof raw.pending_approvals;
+      const top     = (raw.top_institutions  ?? (raw as Record<string, unknown>).top_institutions  ?? []) as typeof raw.top_institutions;
 
       console.log('[Dashboard] Summary:', summary);
       console.log('[Dashboard] Top institutions:', top);
 
       // Map BP distribution to chart items
-      const bpDistribution: BpDistributionItem[] = bpDist
+      const bpDistRaw = bpDist as Record<string, unknown> | null;
+      const bpDistribution: BpDistributionItem[] = bpDistRaw
         ? [
-            { label: 'Normal',    percent: bpDist.normal_pct,    colorVar: 'var(--green)'    },
-            { label: 'Elevated',  percent: bpDist.elevated_pct,  colorVar: 'var(--amber)'    },
-            { label: 'Stage 1/2', percent: bpDist.stage_1_2_pct, colorVar: 'var(--red-soft)' },
-            { label: 'Crisis',    percent: bpDist.crisis_pct,    colorVar: 'var(--red)'      },
+            { label: 'Normal',    percent: (bpDistRaw['normal_pct']    ?? bpDistRaw['normal']    ?? 0) as number, colorVar: 'var(--green)'    },
+            { label: 'Elevated',  percent: (bpDistRaw['elevated_pct']  ?? bpDistRaw['elevated']  ?? 0) as number, colorVar: 'var(--amber)'    },
+            { label: 'Stage 1/2', percent: (bpDistRaw['stage_1_2_pct'] ?? bpDistRaw['stage_1_2'] ?? 0) as number, colorVar: 'var(--red-soft)' },
+            { label: 'Crisis',    percent: (bpDistRaw['crisis_pct']    ?? bpDistRaw['crisis']    ?? 0) as number, colorVar: 'var(--red)'      },
           ].filter((item) => item.percent > 0)
         : [];
 
       // Map screenings trend to chart items
-      const screeningTrend: ScreeningTrendItem[] = trend
-        ? trend.months.map((month, i) => ({ month, value: trend.screenings[i] ?? 0 }))
+      const trendRaw = trend as { months?: string[]; screenings?: number[] } | null;
+      const screeningTrend: ScreeningTrendItem[] = trendRaw?.months
+        ? trendRaw.months.map((month, i) => ({ month, value: trendRaw.screenings?.[i] ?? 0 }))
         : [];
 
       setData({
-        activeInstitutions:   summary?.active_institutions   ?? 0,
-        institutionsIncrement: summary?.institutions_increment ?? 0,
-        totalScreened:        summary?.total_screened         ?? 0,
-        onActiveTreatment:    summary?.on_active_treatment    ?? 0,
+        activeInstitutions:    (summary?.['active_institutions']   ?? summary?.['active_institution_count'] ?? 0) as number,
+        institutionsIncrement: (summary?.['institutions_increment'] ?? 0) as number,
+        totalScreened:         (summary?.['total_screened']         ?? summary?.['total_patients_screened'] ?? 0) as number,
+        onActiveTreatment:     (summary?.['on_active_treatment']    ?? summary?.['patients_on_treatment']   ?? 0) as number,
         bpDistribution,
         screeningTrend,
-        pendingApprovals: pending,
-        topInstitutions:  top,
+        pendingApprovals: pending ?? [],
+        topInstitutions:  top ?? [],
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to load dashboard';
@@ -130,7 +118,9 @@ export function useDashboardAnalytics(): UseDashboardAnalyticsReturn {
     }
   }, []);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => {
+    if (getAccessToken()) fetch();
+  }, [fetch]);
 
   return { data, loading, error, refetch: fetch };
 }
@@ -203,7 +193,9 @@ export function usePlatformAnalytics(): UsePlatformAnalyticsReturn {
     }
   }, []);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => {
+    if (getAccessToken()) fetch();
+  }, [fetch]);
 
   return { data, loading, error, refetch: fetch };
 }

@@ -165,7 +165,7 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
       </div>
 
       {/* ── Row 2: Screenings by Region + Age Distribution ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+      <div className="grid-2col">
 
         {/* Screenings by Region */}
         <div className="card" style={{ marginBottom: 0 }}>
@@ -251,7 +251,7 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
       </div>
 
       {/* ── Row 3: Gender + Risk Level Trend ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+      <div className="grid-2col">
 
         {/* Gender Distribution */}
         <div className="card" style={{ marginBottom: 0 }}>
@@ -268,7 +268,7 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
                   const pct      = genderTotal > 0 ? Math.round((g.count / genderTotal) * 100) : 0;
                   const color    = i === 0 ? 'var(--blue)' : 'var(--amber)';
                   return (
-                    <div key={g.gender} style={{ flex: '1 1 120px', minWidth: '100px' }}>
+                    <div key={`${g.gender}-${i}`} style={{ flex: '1 1 120px', minWidth: '100px' }}>
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '2.4rem', fontWeight: 700, color, lineHeight: 1 }}>
                         {pct}%
                       </div>
@@ -402,7 +402,7 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
           <div className="card-title">Follow-up &amp; Adherence Rates by Institution</div>
           <div className="card-sub">Evaluating programme effectiveness</div>
         </div>
-        <div style={{ overflowX: 'auto' }}>
+        <div className="tbl-scroll">
           {performance.length === 0 ? (
             <div style={{ padding: '24px', textAlign: 'center' }}>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.72rem', color: 'var(--gray)' }}>
@@ -416,25 +416,36 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
                   <th>Institution</th>
                   <th>Region</th>
                   <th>Total Screened</th>
-                  <th>High BP Rate</th>
+                  <th>High BP</th>
+                  <th>Referred</th>
+                  <th>Followed Up</th>
+                  <th>On Treatment</th>
+                  <th>Adherence</th>
                 </tr>
               </thead>
               <tbody>
                 {performance.map((row, idx) => {
-                  // Resolve field aliases — API returns: name, region, total_screened, high_bp_rate
-                  const name         = row.institution_name ?? row.name ?? '—';
-                  const region       = (row as Record<string, unknown>).region as string | null ?? '—';
-                  const screened     = Number(row.screened ?? row.total_screened ?? 0);
-                  const highBpRate   = Number(
-                    (row as Record<string, unknown>).high_bp_rate ??
-                    row.high_bp ?? row.high_bp_count ?? 0
+                  const r = row as Record<string, unknown>;
+
+                  // Available from API
+                  const name    = (row.institution_name ?? row.name ?? '—') as string;
+                  const region  = (r.region as string | null) ?? '—';
+                  const screened = Number(row.screened ?? row.total_screened ?? 0);
+                  const highBpRate = Number(
+                    r.high_bp_rate ?? row.high_bp ?? row.high_bp_count ?? 0,
                   );
+
+                  // Not yet returned by API — show — until backend adds them
+                  const referred   = row.referred    ?? row.referrals              ?? null;
+                  const followedUp = row.followed_up ?? row.follow_up_completions  ?? null;
+                  const onTreatment= row.on_treatment ?? row.on_active_treatment   ?? null;
+                  const adherence  = row.adherence_rate ?? row.avg_adherence       ?? null;
 
                   return (
                     <tr key={name + idx}>
                       <td style={{ fontWeight: 500 }}>{name}</td>
                       <td style={{ fontSize: '.8rem', color: 'var(--ink-mid)' }}>{region}</td>
-                      <td className="mono">{screened.toLocaleString()}</td>
+                      <td className="mono">{screened > 0 ? screened.toLocaleString() : '0'}</td>
                       <td>
                         {highBpRate > 0 ? (
                           <AdherenceBar
@@ -442,9 +453,27 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
                             color={highBpRate >= 50 ? 'amber' : 'green'}
                           />
                         ) : (
-                          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.7rem', color: 'var(--gray)' }}>
-                            0%
-                          </span>
+                          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.7rem', color: 'var(--gray)' }}>0%</span>
+                        )}
+                      </td>
+                      <td className="mono" title={referred == null ? 'Data not yet available' : undefined}>
+                        {referred != null ? Number(referred).toLocaleString() : '—'}
+                      </td>
+                      <td className="mono" title={followedUp == null ? 'Data not yet available' : undefined}>
+                        {followedUp != null ? Number(followedUp).toLocaleString() : '—'}
+                      </td>
+                      <td className="mono" style={{ color: onTreatment != null && Number(onTreatment) > 0 ? 'var(--green)' : undefined }}
+                          title={onTreatment == null ? 'Data not yet available' : undefined}>
+                        {onTreatment != null ? Number(onTreatment).toLocaleString() : '—'}
+                      </td>
+                      <td title={adherence == null ? 'Data not yet available' : undefined}>
+                        {adherence != null ? (
+                          <AdherenceBar
+                            percent={Math.round(Number(adherence))}
+                            color={Number(adherence) >= 70 ? 'green' : 'amber'}
+                          />
+                        ) : (
+                          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.7rem', color: 'var(--gray)' }}>—</span>
                         )}
                       </td>
                     </tr>

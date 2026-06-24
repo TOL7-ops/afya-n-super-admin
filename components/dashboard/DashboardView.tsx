@@ -7,20 +7,18 @@ import BpDistributionChart, { type BpDistributionItem } from '@/components/chart
 import Badge, { institutionTypeVariant } from '@/components/shared/Badge';
 import AdherenceBar from '@/components/shared/AdherenceBar';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import type { PendingInstitution, ToastType } from '@/types';
-import type { TopInstitutionItem } from '@/types/api';
+import type { ToastType } from '@/types';
+import type { FacilityResponse, TopInstitutionItem } from '@/types/api';
 import { useCountUp } from '@/hooks/useCountUp';
+import { deriveLicenseStatus, statusToVariant } from '@/utils/licenseStatus';
 
 interface DashboardViewProps {
-  onAddInstitution: () => void;
   onViewAllInstitutions: () => void;
   onToast: (msg: string, type?: ToastType) => void;
   onExportReport: () => void;
   // Live data from API
-  pendingApprovals: PendingInstitution[];
   topInstitutions: TopInstitutionItem[];
-  onApprove: (id: string, name: string) => void;
-  onReject: (id: string, name: string) => void;
+  organisations: FacilityResponse[];   // combined facilities + institutions for onboardings
   // KPI values
   activeInstitutions: number;
   totalScreened: number;
@@ -50,14 +48,11 @@ function AnimatedKpi({
 }
 
 export default function DashboardView({
-  onAddInstitution,
   onViewAllInstitutions,
   onToast,
   onExportReport,
-  pendingApprovals,
   topInstitutions,
-  onApprove,
-  onReject,
+  organisations,
   activeInstitutions,
   totalScreened,
   onActiveTreatment,
@@ -76,16 +71,38 @@ export default function DashboardView({
     }
   }, [analyticsLoading]);
 
-  // Dynamic subtitle for screened KPI — show last month delta if available
+  // Suppress unused prop warning
+  void analyticsError;
+
   const latestMonthValue = screeningTrend.length > 0 ? screeningTrend[screeningTrend.length - 1].value : null;
   const screenedSub = latestMonthValue
     ? `↑ ${latestMonthValue.toLocaleString()} this month`
-    : 'All time, all institutions';
+    : 'All time, all organizations';
 
-  // BP chart subtitle
   const bpSub = totalScreened > 0
     ? `All time · ${totalScreened.toLocaleString()} patients`
     : 'All time, all patients';
+
+  // Build recent onboardings: combine facilities + institutions, sort by created_at desc, take top 5
+  const recentOnboardings = [...organisations]
+    .filter((o) => !!o.created_at)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 5)
+    .map((o) => ({
+      id:         o.id,
+      name:       o.name,
+      kind:       o._entity_type === 'institution' ? 'Institution' : 'Facility',
+      created_at: o.created_at,
+    }));
+
+  function fmtJoined(iso: string | null | undefined): string {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleDateString('en-GB', {
+        day: 'numeric', month: 'short', year: 'numeric',
+      });
+    } catch { return '—'; }
+  }
 
   return (
     <div>
@@ -93,14 +110,11 @@ export default function DashboardView({
       <div className="pg-hdr">
         <div>
           <div className="pg-title">Platform Overview</div>
-          <div className="pg-sub">All institutions · All regions · Afya v1.0</div>
+          <div className="pg-sub">All organizations · All regions · Afya v1.0</div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button className="btn btn-ghost" onClick={onExportReport}>
             Export Report
-          </button>
-          <button className="btn btn-red" onClick={onAddInstitution}>
-            + Add Institution
           </button>
         </div>
       </div>
@@ -109,7 +123,7 @@ export default function DashboardView({
       <div className="kpi-row">
         <AnimatedKpi
           icon="🏛"
-          label="Active Institutions"
+          label="Active Organizations"
           target={activeInstitutions}
           sub={totalInstitutions > 0 ? `${totalInstitutions} total registered` : 'Registered on platform'}
           started={started}
@@ -130,20 +144,20 @@ export default function DashboardView({
           started={started}
         />
         <KpiCard
-          icon="⚠"
-          label="Pending Approval"
-          value={pendingApprovals.length}
-          sub="Institutions awaiting review"
-          valueColor="amber"
+          icon="📊"
+          label="Total Organizations"
+          value={totalInstitutions}
+          sub="Facilities + Institutions"
+          valueColor=""
         />
       </div>
 
       {/* Charts row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+      <div className="grid-2col">
         <div className="card" style={{ marginBottom: 0 }}>
           <div className="card-hdr">
             <div className="card-title">Screening Volume — Last 6 Months</div>
-            <div className="card-sub">All institutions</div>
+            <div className="card-sub">All organizations</div>
           </div>
           <div className="card-body">
             {analyticsLoading ? (
@@ -169,83 +183,73 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* Pending approvals — always visible, above Top Performers */}
+      {/* Recent Onboardings — top 5 newest organisations from the combined store */}
       <div className="card">
         <div className="card-hdr">
-          <div className="card-title">Pending Institution Approvals</div>
-          <div className="card-sub">Requires your action</div>
+          <div className="card-title">Recent Onboardings</div>
+          <div className="card-sub">Most recently registered organizations</div>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          {pendingApprovals.length === 0 ? (
-            <div style={{ padding: '24px', textAlign: 'center' }}>
+        <div className="card-body">
+          {recentOnboardings.length === 0 ? (
+            <div style={{ padding: '16px 0', textAlign: 'center' }}>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.72rem', color: 'var(--gray)' }}>
-                No pending approvals
+                No recent onboardings
               </span>
             </div>
           ) : (
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Organisation</th>
-                  <th>Type</th>
-                  <th>Region</th>
-                  <th>Contact</th>
-                  <th>Requested</th>
-                  <th>Plan</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingApprovals.map((inst) => (
-                  <tr key={inst.id}>
-                    <td style={{ fontWeight: 500 }}>{inst.name}</td>
-                    <td>
-                      <Badge variant={institutionTypeVariant(inst.type)}>{inst.type}</Badge>
-                    </td>
-                    <td>{inst.region}</td>
-                    <td style={{ fontSize: '.76rem' }}>{inst.contact}</td>
-                    <td className="id-cell">{inst.requestedDate}</td>
-                    <td>
-                      <Badge variant={inst.plan.toLowerCase().includes('trial') ? 'trial' : 'active'}>
-                        {inst.plan}
-                      </Badge>
-                    </td>
-                    <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <button
-                        className="btn-icon"
-                        style={{ color: 'var(--green)', borderColor: 'var(--green-border)' }}
-                        onClick={() => onApprove(inst.id, inst.name)}
-                      >
-                        ✓ Approve
-                      </button>
-                      <button
-                        className="btn-icon"
-                        onClick={() => onReject(inst.id, inst.name)}
-                      >
-                        ✕ Reject
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+              {recentOnboardings.map((org, i) => (
+                <div key={org.id} style={{
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                  padding: '10px 0',
+                  borderBottom: i < recentOnboardings.length - 1 ? '1px solid var(--gray-xlt)' : 'none',
+                }}>
+                  {/* Icon */}
+                  <div style={{
+                    width: '32px', height: '32px', borderRadius: '6px', flexShrink: 0,
+                    background: org.kind === 'Facility' ? 'rgba(59,130,246,.1)' : 'rgba(34,197,94,.1)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '1rem',
+                  }}>
+                    {org.kind === 'Facility' ? '🏥' : '🏛'}
+                  </div>
+                  {/* Name + type */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, fontSize: '.84rem', color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {org.name}
+                    </div>
+                    <div style={{ fontSize: '.7rem', color: 'var(--gray)', marginTop: '1px' }}>
+                      {org.kind}
+                    </div>
+                  </div>
+                  {/* Joined date */}
+                  <div style={{
+                    fontFamily: "'JetBrains Mono',monospace",
+                    fontSize: '.68rem', color: 'var(--gray)',
+                    flexShrink: 0, whiteSpace: 'nowrap',
+                  }}>
+                    Joined {fmtJoined(org.created_at)}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
 
-      {/* Top institutions */}
+      {/* Top organizations */}
       <div className="card">
         <div className="card-hdr">
-          <div className="card-title">Top Performing Institutions</div>
+          <div className="card-title">Top Performing Organizations</div>
           <button className="btn-sm" onClick={onViewAllInstitutions}>
             View All →
           </button>
         </div>
-        <div style={{ overflowX: 'auto' }}>
+        <div className="tbl-scroll">
           <table className="tbl">
             <thead>
               <tr>
-                <th>Institution</th>
+                <th>Organization</th>
                 <th>Type</th>
                 <th>Field Workers</th>
                 <th>Screened</th>
@@ -262,7 +266,7 @@ export default function DashboardView({
                     textAlign: 'center', padding: '24px',
                     fontFamily: "'JetBrains Mono',monospace", fontSize: '.72rem', color: 'var(--gray)',
                   }}>
-                    {analyticsLoading ? 'Loading…' : 'No active institutions yet'}
+                    {analyticsLoading ? 'Loading…' : 'No data available'}
                   </td>
                 </tr>
               ) : (
@@ -292,10 +296,22 @@ export default function DashboardView({
                       )}
                     </td>
                     <td>
-                      <Badge variant="active">{inst.license_status ?? 'Active'}</Badge>
+                      <Badge variant={statusToVariant(deriveLicenseStatus({
+                        status: inst.license_status,
+                        is_active: inst.status?.toLowerCase() !== 'suspended',
+                        license_plan: inst.license_status ?? '',
+                        expires_at: (inst as Record<string,unknown>).license_expires_at as string ?? null,
+                      }))}>
+                        {inst.license_status ?? '—'}
+                      </Badge>
                     </td>
                     <td>
-                      <Badge variant={inst.status?.toLowerCase() === 'active' ? 'active' : 'pending'}>
+                      <Badge variant={statusToVariant(deriveLicenseStatus({
+                        status: inst.status,
+                        is_active: inst.is_active as boolean ?? (inst.status?.toLowerCase() === 'active'),
+                        license_plan: inst.license_status ?? '',
+                        expires_at: (inst as Record<string,unknown>).license_expires_at as string ?? null,
+                      }))}>
                         {inst.status ?? '—'}
                       </Badge>
                     </td>

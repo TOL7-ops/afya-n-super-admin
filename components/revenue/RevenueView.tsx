@@ -3,21 +3,15 @@
 import { useEffect, useState, useCallback } from 'react';
 import type { ToastType } from '@/types';
 import {
-  getRevenueSummary,
-  getRevenueMonthlyTrend,
-  getRevenueByType,
-  getRevenueTransactions,
+  getRevenueAnalytics,
+  getTransactions,
   exportRevenueCsv,
 } from '@/services/revenue.service';
-import { listLicenses } from '@/services/licenses.service';
-import { listInstitutions } from '@/services/institutions.service';
+import { deriveLicenseStatus, statusToVariant } from '@/utils/licenseStatus';
+import Badge from '@/components/shared/Badge';
 import type {
-  RevenueSummaryResponse,
-  RevenueMonthlyTrendResponse,
-  RevenueByTypeResponse,
+  RevenueAnalyticsResponse,
   RevenueTransactionItem,
-  LicenseItem,
-  FacilityResponse,
 } from '@/types/api';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 
@@ -44,49 +38,39 @@ function fmtDate(iso: string | null) {
   });
 }
 
-function statusChip(status: string): string {
-  const s = status.toLowerCase();
-  if (s.includes('paid') || s.includes('active')) return 'chip-active';
-  if (s.includes('trial'))     return 'chip-trial';
-  if (s.includes('due') || s.includes('expir')) return 'chip-pending';
-  if (s.includes('suspend'))   return 'chip-suspended';
-  return 'chip-ngo';
-}
-
 export default function RevenueView({ onToast }: RevenueViewProps) {
-  const [summary, setSummary]       = useState<RevenueSummaryResponse | null>(null);
-  const [trend, setTrend]           = useState<RevenueMonthlyTrendResponse | null>(null);
-  const [byType, setByType]         = useState<RevenueByTypeResponse | null>(null);
+  const [analytics, setAnalytics]   = useState<RevenueAnalyticsResponse | null>(null);
   const [transactions, setTxns]     = useState<RevenueTransactionItem[]>([]);
-  const [licenses, setLicenses]     = useState<LicenseItem[]>([]);
-  const [institutions, setInstitutions] = useState<FacilityResponse[]>([]);
   const [loading, setLoading]       = useState(true);
   const [animated, setAnimated]     = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, t, bt, txns, lics, insts] = await Promise.all([
-        getRevenueSummary(),
-        getRevenueMonthlyTrend(),
-        getRevenueByType(),
-        getRevenueTransactions(),
-        listLicenses().catch(() => [] as LicenseItem[]),
-        listInstitutions().catch(() => [] as FacilityResponse[]),
+      const [analyticsResult, txnsResult] = await Promise.allSettled([
+        getRevenueAnalytics(),
+        getTransactions(),
       ]);
-      setSummary(s);
-      setTrend(t);
-      setByType(bt);
-      setTxns(txns);
-      setLicenses(lics);
-      setInstitutions(insts);
-      console.log('[Revenue] Summary:', s);
-      console.log('[Revenue] Trend:', t);
-      console.log('[Revenue] ByType:', bt);
-      console.log('[Revenue] Transactions raw[0]:', txns[0] ?? 'empty array');
-      console.log('[Revenue] Licenses[0]:', lics[0] ?? 'empty');
+
+      if (analyticsResult.status === 'fulfilled') {
+        const raw = analyticsResult.value as Record<string, unknown>;
+        console.log('[Revenue] Analytics keys:', Object.keys(raw));
+        console.log('[Revenue] Analytics:', raw);
+        setAnalytics(analyticsResult.value);
+      } else {
+        const e = analyticsResult.reason as { response?: { status?: number; data?: unknown } };
+        console.error('[Revenue] Analytics failed:', e?.response?.status, e?.response?.data ?? analyticsResult.reason);
+      }
+
+      if (txnsResult.status === 'fulfilled') {
+        setTxns(txnsResult.value as RevenueTransactionItem[]);
+        console.log('[Revenue] Transactions[0]:', (txnsResult.value as RevenueTransactionItem[])[0] ?? 'empty');
+      } else {
+        console.warn('[Revenue] Transactions failed:', txnsResult.reason);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to load revenue data';
+      console.error('[Revenue] loadAll error:', err);
       onToast(`Revenue error: ${msg}`, 'warn');
     } finally {
       setLoading(false);
@@ -94,7 +78,12 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
+  // Only fetch when authenticated
+  useEffect(() => {
+    import('@/services/authService').then(({ getAccessToken }) => {
+      if (getAccessToken()) loadAll();
+    });
+  }, [loadAll]);
 
   useEffect(() => {
     if (!loading) {
@@ -127,14 +116,36 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
     );
   }
 
-  // ── Monthly trend chart data ───────────────────────────────────────────────
-  const trendMonths  = trend?.months  ?? [];
-  const trendAmounts = trend?.revenue ?? [];
-  const maxRevenue   = trendAmounts.length > 0 ? Math.max(...trendAmounts, 1) : 1;
+  // ── KPI helpers — API returns { kpis: {...}, monthly_trend: [{month,amount}], revenue_by_type: {...} }
+  const a    = analytics as Record<string, unknown> | null;
+  // KPIs may be nested under 'kpis' or flat at the top level
+  const kpis = (a?.['kpis'] ?? a) as Record<string, unknown> | null;
+  const totalRevenue      = Number(kpis?.['total_revenue']        ?? kpis?.['total_revenue_all_time'] ?? 0);
+  const revenueThisMonth  = Number(kpis?.['revenue_this_month']   ?? kpis?.['MRR']                   ?? 0);
+  const renewalsDue       = Number(kpis?.['renewals_due_30_days'] ?? kpis?.['renewals_due']           ?? 0);
+  const annualRunRate     = Number(kpis?.['annual_run_rate']       ?? kpis?.['ARR']                  ?? 0);
 
-  // ── By-type chart data ────────────────────────────────────────────────────
-  const byTypeEntries = byType
-    ? Object.entries(byType).filter(([, v]) => v > 0)
+  // ── Monthly trend — API returns [{ month: "Jan", amount: 0 }, ...]
+  // Also handle legacy shape { months: [], revenue: [] }
+  const rawTrend = a?.['monthly_trend'];
+  let trendMonths: string[]  = [];
+  let trendAmounts: number[] = [];
+  if (Array.isArray(rawTrend) && rawTrend.length > 0) {
+    // New shape: array of { month, amount }
+    trendMonths  = (rawTrend as Array<Record<string, unknown>>).map((r) => String(r['month'] ?? ''));
+    trendAmounts = (rawTrend as Array<Record<string, unknown>>).map((r) => Number(r['amount'] ?? r['revenue'] ?? 0));
+  } else if (rawTrend && typeof rawTrend === 'object' && !Array.isArray(rawTrend)) {
+    // Legacy shape: { months: [], revenue: [] }
+    const t = rawTrend as Record<string, unknown>;
+    trendMonths  = (t['months']  as string[] | undefined) ?? [];
+    trendAmounts = (t['revenue'] as number[] | undefined) ?? [];
+  }
+  const maxRevenue = trendAmounts.length > 0 ? Math.max(...trendAmounts, 1) : 1;
+
+  // ── By-type — API returns { Government: 0, Hospital: 6000, ... }
+  const byTypeRaw = (a?.['revenue_by_type'] ?? a?.['by_type'] ?? null) as Record<string, number> | null;
+  const byTypeEntries = byTypeRaw
+    ? Object.entries(byTypeRaw).filter(([, v]) => v > 0)
     : [];
   const maxByType = byTypeEntries.length > 0
     ? Math.max(...byTypeEntries.map(([, v]) => v), 1)
@@ -158,39 +169,33 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
         <div className="kpi">
           <div className="kpi-ico">💰</div>
           <div className="kpi-lbl">Total Revenue (All Time)</div>
-          <div className="kpi-val green">{summary ? fmtGhs(summary.total_revenue) : '—'}</div>
+          <div className="kpi-val green">{analytics ? fmtGhs(totalRevenue) : '—'}</div>
           <div className="kpi-sub">Cumulative licensing income</div>
         </div>
         <div className="kpi">
           <div className="kpi-ico">📅</div>
           <div className="kpi-lbl">MRR</div>
-          <div className="kpi-val green">
-            {summary ? fmtGhs(summary.MRR) : '—'}
-          </div>
+          <div className="kpi-val green">{analytics ? fmtGhs(revenueThisMonth) : '—'}</div>
           <div className="kpi-sub">Monthly recurring revenue</div>
         </div>
         <div className="kpi">
           <div className="kpi-ico">🔄</div>
           <div className="kpi-lbl">Renewals Due (30 Days)</div>
           <div className="kpi-val amber">
-            {summary
-              ? summary.renewals_due_30_days > 0
-                ? fmtGhs(summary.renewals_due_30_days)
-                : '—'
-              : '—'}
+            {analytics ? (renewalsDue > 0 ? fmtGhs(renewalsDue) : '—') : '—'}
           </div>
           <div className="kpi-sub">Revenue at risk if not renewed</div>
         </div>
         <div className="kpi">
           <div className="kpi-ico">📈</div>
           <div className="kpi-lbl">ARR</div>
-          <div className="kpi-val">{summary ? fmtGhs(summary.ARR) : '—'}</div>
+          <div className="kpi-val">{analytics ? fmtGhs(annualRunRate) : '—'}</div>
           <div className="kpi-sub">Annual recurring revenue</div>
         </div>
       </div>
 
       {/* ── Charts Row ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+      <div className="grid-2col">
 
         {/* Monthly Revenue Trend */}
         <div className="card" style={{ marginBottom: 0 }}>
@@ -304,7 +309,7 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
               : 'No paid transactions yet'}
           </div>
         </div>
-        <div style={{ overflowX: 'auto' }}>
+        <div className="tbl-scroll">
           <table className="tbl">
             <thead>
               <tr>
@@ -328,42 +333,15 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
               ) : (
                 transactions.map((tx) => {
                   const instName = tx.institution_name ?? '—';
-
-                  // Look up license data by institution name to get plan, type, period
-                  const lic = licenses.find(
-                    (l) => l.institution_name?.trim().toLowerCase() === instName.trim().toLowerCase(),
-                  );
-                  const inst = institutions.find(
-                    (i) => i.name.trim().toLowerCase() === instName.trim().toLowerCase(),
-                  ) ?? institutions.find(
-                    (i) =>
-                      i.name.trim().toLowerCase().includes(instName.trim().toLowerCase()) ||
-                      instName.trim().toLowerCase().includes(i.name.trim().toLowerCase()),
-                  );
-
-                  if (!inst) {
-                    console.log(`[Revenue] No institution match for "${instName}". Available:`, institutions.map(i => i.name));
-                  } else {
-                    console.log(`[Revenue] Matched "${instName}" → type: "${inst.type}"`);
-                  }
-
-                  const plan     = lic?.plan ?? '—';
-                  const instType = inst?.type ?? '—';
-                  const amount = tx.amount ?? 0;
-
-                  // payment date — API uses paid_at
+                  const amount   = tx.amount ?? 0;
                   const paymentDate = tx.paid_at ?? tx.payment_date ?? null;
-
-                  const method  = tx.payment_method ?? '—';
+                  const method   = tx.payment_method ?? '—';
                   const statusVal = tx.status ?? 'Paid';
 
-                  // Period — compute from license start_date + expires_at
-                  let period = '—';
-                  if (lic?.start_date && lic?.expires_at) {
-                    const fmtMon = (iso: string) =>
-                      new Date(iso).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
-                    period = `${fmtMon(lic.start_date)} – ${fmtMon(lic.expires_at)}`;
-                  }
+                  // API now returns plan, type, period directly on each transaction
+                  const plan    = (tx.plan ?? (tx as Record<string,unknown>)['plan'] ?? '—') as string;
+                  const instType = (tx.type ?? (tx as Record<string,unknown>)['type'] ?? '—') as string;
+                  const period  = (tx.period ?? (tx as Record<string,unknown>)['period'] ?? '—') as string;
 
                   return (
                     <tr key={tx.id}>
@@ -379,9 +357,13 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
                         {period}
                       </td>
                       <td>
-                        <span className={`chip ${statusChip(statusVal)}`} style={{ fontSize: '.62rem' }}>
+                        <Badge variant={statusToVariant(deriveLicenseStatus({
+                          is_active: !statusVal.toLowerCase().includes('suspend'),
+                          license_plan: statusVal.toLowerCase().includes('trial') ? 'trial' : 'paid',
+                          expires_at: (tx as Record<string,unknown>).expires_at as string ?? null,
+                        }))}>
                           {statusVal}
-                        </span>
+                        </Badge>
                       </td>
                     </tr>
                   );

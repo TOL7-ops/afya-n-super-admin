@@ -16,6 +16,14 @@ import type { UserResponse } from '@/types/api';
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? 'https://afya-backend-production.up.railway.app';
 
+/**
+ * In the browser, use relative URLs so requests are proxied by Next.js (no CORS).
+ * On the server, use the full backend URL.
+ */
+function apiBase(): string {
+  return typeof window !== 'undefined' ? '' : BASE_URL;
+}
+
 const TOKEN_KEY = 'afya_access_token';
 const USER_KEY  = 'afya_user';
 
@@ -28,6 +36,7 @@ export interface LoginPayload {
 export interface TokenResponse {
   access_token: string;
   token_type: string;
+  refresh_token?: string | null;
 }
 
 // ─── Storage helpers (safe in SSR — guard with typeof window) ─────────────────
@@ -81,14 +90,19 @@ export async function login(payload: LoginPayload): Promise<UserResponse> {
   console.log('[Auth] Login request →', payload.username_or_email);
 
   const tokenRes = await axios.post<TokenResponse>(
-    `${BASE_URL}/api/v1/users/login`,
+    `${apiBase()}/api/v1/users/login`,
     payload,
-    { headers: { 'Content-Type': 'application/json' } },
+    { headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' } },
   );
 
-  const { access_token } = tokenRes.data;
+  const { access_token, refresh_token } = tokenRes.data;
   console.log('[Auth] Login success — token received');
   setToken(access_token);
+
+  // Store refresh token for silent token renewal
+  if (refresh_token && typeof window !== 'undefined') {
+    localStorage.setItem('afya_refresh_token', refresh_token);
+  }
 
   // Fetch user profile immediately after login
   const user = await getCurrentUser(access_token);
@@ -106,8 +120,8 @@ export async function getCurrentUser(token?: string): Promise<UserResponse> {
   const jwt = token ?? getAccessToken();
   if (!jwt) throw new Error('No access token available');
 
-  const res = await axios.get<UserResponse>(`${BASE_URL}/api/v1/users/me`, {
-    headers: { Authorization: `Bearer ${jwt}` },
+  const res = await axios.get<UserResponse>(`${apiBase()}/api/v1/users/me`, {
+    headers: { Authorization: `Bearer ${jwt}`, 'ngrok-skip-browser-warning': 'true' },
   });
 
   return res.data;

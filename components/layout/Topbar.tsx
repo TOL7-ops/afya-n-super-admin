@@ -2,6 +2,10 @@
 
 import { useAuth } from '@/hooks/useAuth';
 
+interface TopbarProps {
+  onMenuToggle: () => void;
+}
+
 /** Returns initials from a full name, e.g. "Ama Osei" → "AO" */
 function initials(name: string): string {
   return name
@@ -12,7 +16,7 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
-export default function Topbar() {
+export default function Topbar({ onMenuToggle }: TopbarProps) {
   const { user, logout } = useAuth();
 
   const displayName = user?.full_name ?? 'Platform Admin';
@@ -22,24 +26,36 @@ export default function Topbar() {
   return (
     <div className="topbar">
       <div className="topbar-left">
+        {/* Hamburger — visible on mobile only via CSS */}
+        <button
+          className="hamburger"
+          onClick={onMenuToggle}
+          aria-label="Open navigation menu"
+        >
+          ☰
+        </button>
+
         <div className="logo">
           <div className="logo-dot" />
           Afya
         </div>
-        <div className="sep" />
+        {/* Sep + badge hidden on mobile via CSS */}
+        <div className="sep sep-topbar-mid" />
         <span className="admin-badge">{displayRole}</span>
       </div>
+
       <div className="topbar-right">
         <div className="user-pill">
           <div className="user-ava">{ava}</div>
-          {displayName}
+          {/* Name hidden on mobile via CSS */}
+          <span className="user-pill-name">{displayName}</span>
         </div>
         <div className="sep" />
         <button
           className="btn-back"
           onClick={logout}
           title="Sign out"
-          style={{ cursor: 'pointer' }}
+          aria-label="Sign out"
         >
           Sign Out
         </button>

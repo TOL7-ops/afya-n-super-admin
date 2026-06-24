@@ -5,34 +5,21 @@ import Badge, { institutionTypeVariant } from '@/components/shared/Badge';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import type { ToastType } from '@/types';
 import type { FacilityResponse } from '@/types/api';
-import { getFacilityStatus } from '@/utils/facilityStatus';
+import { deriveLicenseStatus, statusToVariant } from '@/utils/licenseStatus';
+import { cleanPlanLabel } from '@/utils/planAmount';
 
 interface InstitutionsViewProps {
   facilities: FacilityResponse[];
   loading: boolean;
   onAddInstitution: () => void;
   onEdit: (facility: FacilityResponse) => void;
-  onSuspend: (id: number, active: boolean, name: string) => void;
-  onExtendTrial: (id: number, name: string) => void;
+  onSuspend: (id: string, active: boolean, name: string) => void;
+  onExtendTrial: (id: string, name: string) => void;
   onToast: (msg: string, type?: ToastType) => void;
 }
 
 type StatusFilter = '' | 'Active' | 'Trial' | 'Suspended' | 'Pending' | 'Expiring';
 type TypeFilter   = '' | 'Government' | 'NGO' | 'Hospital' | 'Pharmacy' | 'Employer' | 'Research';
-
-function facilityStatusLabel(f: FacilityResponse): StatusFilter {
-  return getFacilityStatus(f) as StatusFilter;
-}
-
-function statusVariant(
-  status: StatusFilter,
-): 'active' | 'suspended' | 'pending' | 'trial' | 'expiring' {
-  if (status === 'Active')    return 'active';
-  if (status === 'Suspended') return 'suspended';
-  if (status === 'Trial')     return 'trial';
-  if (status === 'Expiring')  return 'expiring';
-  return 'pending';
-}
 
 export default function InstitutionsView({
   facilities,
@@ -54,9 +41,8 @@ export default function InstitutionsView({
       f.name.toLowerCase().includes(q) ||
       (f.region ?? '').toLowerCase().includes(q) ||
       (f.license_plan ?? '').toLowerCase().includes(q);
-    const status = facilityStatusLabel(f);
+    const status = deriveLicenseStatus(f);
     const matchS = !statusFilter || status === statusFilter;
-    // type comes directly from API — no heuristics needed
     const type   = f.type ?? '—';
     const matchT = !typeFilter || type === typeFilter;
     return matchQ && matchS && matchT;
@@ -147,7 +133,7 @@ export default function InstitutionsView({
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div className="tbl-scroll">
           <table className="tbl">
             <thead>
               <tr>
@@ -155,7 +141,6 @@ export default function InstitutionsView({
                 <th>Type</th>
                 <th>Region</th>
                 <th>Seats</th>
-                <th>Field Workers</th>
                 <th>Total Screened</th>
                 <th>License Expires</th>
                 <th>Status</th>
@@ -166,7 +151,7 @@ export default function InstitutionsView({
               {filtered.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={8}
                     style={{
                       textAlign: 'center', padding: '24px',
                       fontFamily: "'JetBrains Mono',monospace",
@@ -178,13 +163,12 @@ export default function InstitutionsView({
                 </tr>
               ) : (
                 filtered.map((f) => {
-                  const status = facilityStatusLabel(f);
+                  const status        = deriveLicenseStatus(f);
+                  const variant       = statusToVariant(status);
                   const type          = f.type ?? '—';
-                  const fieldWorkers  = f.field_workers_count ?? 0;
                   const totalScreened = f.total_screened ?? 0;
                   const seats         = f.seats ?? f.max_seats ?? null;
-                  // API returns license_expiry; fall back to license_expires_at
-                  const expiryIso = f.license_expiry ?? f.license_expires_at;
+                  const expiryIso     = f.license_expiry ?? f.license_expires_at;
                   const expiry = expiryIso
                     ? new Date(expiryIso).toLocaleDateString('en-GB', {
                         day: 'numeric', month: 'short', year: 'numeric',
@@ -197,21 +181,34 @@ export default function InstitutionsView({
                     <tr key={f.id}>
                       <td style={{ fontWeight: 500 }}>{f.name}</td>
                       <td>
-                        <Badge variant={institutionTypeVariant(type)}>{type}</Badge>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <Badge variant={institutionTypeVariant(type)}>{type}</Badge>
+                          {f._entity_type && (
+                            <span style={{
+                              fontSize: '.58rem',
+                              fontFamily: "'JetBrains Mono', monospace",
+                              padding: '1px 5px',
+                              borderRadius: '2px',
+                              alignSelf: 'flex-start',
+                              background: f._entity_type === 'facility' ? 'rgba(59,130,246,.1)' : 'rgba(34,197,94,.1)',
+                              color: f._entity_type === 'facility' ? 'var(--blue)' : 'var(--green)',
+                              border: `1px solid ${f._entity_type === 'facility' ? 'rgba(59,130,246,.25)' : 'rgba(34,197,94,.25)'}`,
+                            }}>
+                              {f._entity_type === 'facility' ? 'Facility' : 'Institution'}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td>{f.region ?? '—'}</td>
                       <td className="mono">
                         {seats != null ? seats : '—'}
                       </td>
                       <td className="mono">
-                        {fieldWorkers}
-                      </td>
-                      <td className="mono">
                         {totalScreened.toLocaleString()}
                       </td>
                       <td className="id-cell">{expiry}</td>
                       <td>
-                        <Badge variant={statusVariant(status)}>{status}</Badge>
+                        <Badge variant={variant}>{status}</Badge>
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>

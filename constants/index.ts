@@ -55,6 +55,7 @@ export const PENDING_APPROVALS: PendingInstitution[] = [
     contact: 'Dr. Kwame Asare',
     requestedDate: '14 May 2026',
     plan: 'Annual',
+    facilityId: null,
   },
   {
     id: 'pa-2',
@@ -64,6 +65,7 @@ export const PENDING_APPROVALS: PendingInstitution[] = [
     contact: 'Ms. Ama Dankwah',
     requestedDate: '16 May 2026',
     plan: 'Trial',
+    facilityId: null,
   },
 ];
 

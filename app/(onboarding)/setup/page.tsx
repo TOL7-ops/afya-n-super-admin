@@ -11,10 +11,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import axios from 'axios';
-
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? 'https://afya-backend-production.up.railway.app';
+import api from '@/lib/api';
 
 interface VerifyResponse {
   token: string;
@@ -55,10 +52,9 @@ function SetupVerifyInner() {
 
     setLoading(true);
     try {
-      const res = await axios.post<VerifyResponse>(
-        `${BASE_URL}/api/v1/users/setup-tokens/verify`,
+      const res = await api.post<VerifyResponse>(
+        '/api/v1/users/setup-tokens/verify',
         { token: token.trim(), email: email.trim() },
-        { headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' } },
       );
 
       // Store verified data for the next steps

@@ -24,7 +24,7 @@ import type { FacilityResponse } from '@/types/api';
  * Old signature: suspendFacility(id, active) — kept for AdminShell compatibility.
  */
 export async function suspendFacilityLegacy(
-  facilityId: number,
+  facilityId: string,
   active: boolean,
 ): Promise<FacilityResponse> {
   return updateInstitutionStatus(facilityId, active);

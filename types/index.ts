@@ -58,6 +58,8 @@ export interface PendingInstitution {
   contact: string;
   requestedDate: string;
   plan: string;
+  /** Real UUID facility ID for action endpoints — NOT the string token `id` above */
+  facilityId: string | null;
 }
 
 export interface TopInstitution {
@@ -158,7 +160,7 @@ export interface EditInstitutionForm {
 }
 
 export interface IssueLicenseForm {
-  facilityId: number;
+  facilityId: string;
   institution: string;
   plan: string;
   startDate: string;

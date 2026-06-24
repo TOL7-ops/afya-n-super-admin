@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { listActivityLogs } from '@/services/users.service';
+import { getAccessToken } from '@/services/authService';
 import type { AgentActivityLogResponse } from '@/types/api';
 
 export interface UseAuditLogReturn {
@@ -33,7 +34,9 @@ export function useAuditLog(): UseAuditLogReturn {
     }
   }, []);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    if (getAccessToken()) fetchAll();
+  }, [fetchAll]);
 
   const loadMore = useCallback(() => {
     // No pagination on super-admin audit-logs endpoint

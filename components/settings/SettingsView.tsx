@@ -20,6 +20,10 @@ interface SettingsViewProps {
   onToast: (msg: string, type?: ToastType) => void;
 }
 
+// TODO: Replace with API call once backend implements:
+// GET /api/v1/super-admin/settings/bp-thresholds
+// PUT /api/v1/super-admin/settings/bp-thresholds
+// Until then these values are intentionally static (WHO/AHA standard).
 const BP_THRESHOLDS = [
   { label: 'Normal',  value: '< 120/80',        color: 'var(--green)' },
   { label: 'Elevated',value: '120–129 / <80',   color: 'var(--amber)' },
@@ -43,10 +47,11 @@ function labelToRetentionDays(label: string): number {
 }
 
 export default function SettingsView({ onToast }: SettingsViewProps) {
-  const [whatsapp, setWhatsapp]         = useState<WhatsAppSettingsResponse | null>(null);
-  const [compliance, setCompliance]     = useState<ComplianceSettingsResponse | null>(null);
-  const [permissions, setPermissions]   = useState<PermissionRoleItem[]>([]);
-  const [loading, setLoading]           = useState(true);
+  const [whatsapp, setWhatsapp]               = useState<WhatsAppSettingsResponse | null>(null);
+  const [compliance, setCompliance]           = useState<ComplianceSettingsResponse | null>(null);
+  const [permissions, setPermissions]         = useState<PermissionRoleItem[]>([]);
+  const [permissionsFallback, setPermissionsFallback] = useState(false);
+  const [loading, setLoading]                 = useState(true);
 
   // Edit state for WhatsApp
   const [wpProvider, setWpProvider]     = useState('');
@@ -78,6 +83,8 @@ export default function SettingsView({ onToast }: SettingsViewProps) {
         setConsentRequired(comp.consent_required);
       }
       setPermissions(perms);
+      // Track whether the permissions API returned useful data or we fell back to the static list
+      setPermissionsFallback(perms.length === 0);
 
       console.log('[Settings] WhatsApp:', wp);
       console.log('[Settings] Compliance:', comp);
@@ -143,7 +150,7 @@ export default function SettingsView({ onToast }: SettingsViewProps) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+      <div className="grid-2col" style={{ alignItems: 'start' }}>
 
         {/* WhatsApp Configuration */}
         <div className="card" style={{ marginBottom: 0 }}>
@@ -243,6 +250,19 @@ export default function SettingsView({ onToast }: SettingsViewProps) {
           </div>
           <div className="card-body">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {permissionsFallback && (
+                <div style={{
+                  fontSize: '.72rem',
+                  color: '#92400e',
+                  background: '#fffbeb',
+                  border: '1px solid #fcd34d',
+                  borderRadius: '3px',
+                  padding: '8px 12px',
+                  marginBottom: '4px',
+                }}>
+                  Showing default permissions — live data unavailable
+                </div>
+              )}
               {permissions.length === 0 ? (
                 // Fallback static list if API returns nothing
                 [

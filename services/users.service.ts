@@ -22,18 +22,17 @@ export async function listUsers(): Promise<UserResponse[]> {
 }
 
 /** GET /api/v1/super-admin/users/{id} */
-export async function getUserById(userId: number): Promise<UserResponse> {
+export async function getUserById(userId: string): Promise<UserResponse> {
   const res = await api.get<UserResponse>(`/api/v1/super-admin/users/${userId}`);
   return res.data;
 }
 
 /**
  * PATCH /api/v1/super-admin/users/{id}/status
- * Replaces both deactivateUser() and reactivateUser() — single endpoint.
  * @param isActive true = reactivate, false = suspend
  */
 export async function updateUserStatus(
-  userId: number,
+  userId: string,
   isActive: boolean,
 ): Promise<UserResponse> {
   const res = await api.patch<UserResponse>(
@@ -44,12 +43,12 @@ export async function updateUserStatus(
 }
 
 /** @deprecated Use updateUserStatus(id, false) */
-export async function deactivateUser(userId: number): Promise<UserResponse> {
+export async function deactivateUser(userId: string): Promise<UserResponse> {
   return updateUserStatus(userId, false);
 }
 
 /** @deprecated Use updateUserStatus(id, true) */
-export async function reactivateUser(userId: number): Promise<UserResponse> {
+export async function reactivateUser(userId: string): Promise<UserResponse> {
   return updateUserStatus(userId, true);
 }
 
@@ -61,7 +60,7 @@ export async function registerUser(body: {
   name: string;
   email: string;
   role: string;
-  facility_id: number;
+  facility_id: string;
 }): Promise<UserResponse> {
   const res = await api.post<UserResponse>('/api/v1/users/register', {
     full_name: body.name,
@@ -89,9 +88,10 @@ export async function listActivityLogs(
   return unwrapArray<AgentActivityLogResponse>(res.data, 'AuditLogs');
 }
 
-/** GET /api/v1/super-admin/audit-logs/export — CSV blob download */
+/** GET /api/v1/super-admin/audit-logs?format=csv — CSV blob download */
 export async function exportAuditLogCsv(): Promise<void> {
-  const res = await api.get('/api/v1/super-admin/audit-logs/export', {
+  const res = await api.get('/api/v1/super-admin/audit-logs', {
+    params: { format: 'csv' },
     responseType: 'blob',
   });
   triggerDownload(res.data as Blob, 'afya-audit-log.csv');

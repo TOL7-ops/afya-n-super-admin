@@ -2,17 +2,18 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import Sidebar, { type SidebarStats } from './Sidebar';
+import Topbar from './Topbar';
 import Toast from '@/components/shared/Toast';
 import DashboardView from '@/components/dashboard/DashboardView';
-import InstitutionsView from '@/components/institutions/InstitutionsView';
+import InstitutionsView from '@/components/organisations/OrganisationsView';
 import LicensesView from '@/components/licenses/LicensesView';
 import AnalyticsView from '@/components/analytics/AnalyticsView';
 import RevenueView from '@/components/revenue/RevenueView';
 import UsersView from '@/components/users/UsersView';
 import AuditView from '@/components/audit/AuditView';
 import SettingsView from '@/components/settings/SettingsView';
-import CreateInstitutionModal from '@/components/modals/CreateInstitutionModal';
-import EmailPreviewModal from '@/components/modals/EmailPreviewModal';
+import AddFacilityModal from '@/components/modals/AddFacilityModal';
+import AddInstitutionModal from '@/components/modals/AddInstitutionModal';
 import ConvertTrialModal from '@/components/modals/ConvertTrialModal';
 import IssueLicenseModal from '@/components/modals/IssueLicenseModal';
 import EditInstitutionModal from '@/components/modals/EditInstitutionModal';
@@ -22,121 +23,20 @@ import { useModal } from '@/hooks/useModal';
 import { useFacilities } from '@/hooks/useFacilities';
 import { useDashboardAnalytics } from '@/hooks/useAnalytics';
 import { exportDashboardReport } from '@/services/analytics.service';
-import { convertTrial, issueLicense } from '@/services/licenses.service';
-import { extractAmountFromPlan } from '@/utils/planAmount';
+import { convertTrial } from '@/services/licenses.service';
 
 import type {
   ViewId,
-  PendingInstitution,
-  CreateInstitutionForm,
-  IssueLicenseForm,
   EditInstitutionForm,
-  EmailPreviewData,
-  PendingInstitutionData,
 } from '@/types';
 import type {
   FacilityResponse,
-  InstitutionCreatePayload,
-  PendingApprovalItem,
   TopInstitutionItem,
 } from '@/types/api';
 
-/**
- * Resolve a numeric institution ID from a pending-approval token.
- * The token number (e.g. "token-3" → 3) does NOT match the institution ID.
- * Primary strategy: match by name against the loaded institutions list.
- * Fallback: parse the token number directly (only if name match fails).
- */
-function resolveInstitutionId(
-  tokenId: string,
-  name: string,
-  facilities: FacilityResponse[],
-): number | null {
-  // Normalize: lowercase, collapse all whitespace to single space, trim
-  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
-  const needle = norm(name);
-
-  console.log(`[resolveInstitutionId] Looking for "${needle}" among:`, facilities.map(f => `${f.id}:"${norm(f.name)}"`));
-
-  // Strategy 1: exact normalized match
-  const exactMatch = facilities.find((f) => norm(f.name) === needle);
-  if (exactMatch) {
-    console.log(`[resolveInstitutionId] Exact match → id=${exactMatch.id}`);
-    return exactMatch.id;
-  }
-
-  // Strategy 2: one starts with the other (handles "Ho Municipal" vs "Ho Municipal Hospital")
-  const startsMatch = facilities.find(
-    (f) => norm(f.name).startsWith(needle) || needle.startsWith(norm(f.name)),
-  );
-  if (startsMatch) {
-    console.log(`[resolveInstitutionId] StartsWith match "${name}" → "${startsMatch.name}" id=${startsMatch.id}`);
-    return startsMatch.id;
-  }
-
-  // Strategy 3: contains match
-  const containsMatch = facilities.find(
-    (f) => norm(f.name).includes(needle) || needle.includes(norm(f.name)),
-  );
-  if (containsMatch) {
-    console.log(`[resolveInstitutionId] Contains match "${name}" → "${containsMatch.name}" id=${containsMatch.id}`);
-    return containsMatch.id;
-  }
-
-  // Strategy 4: first-word match (e.g. "Ho" matches "Ho Municipal Hospital")
-  const firstWord = needle.split(' ')[0];
-  if (firstWord && firstWord.length > 2) {
-    const wordMatch = facilities.find((f) => norm(f.name).startsWith(firstWord));
-    if (wordMatch) {
-      console.log(`[resolveInstitutionId] First-word match "${firstWord}" → "${wordMatch.name}" id=${wordMatch.id}`);
-      return wordMatch.id;
-    }
-  }
-
-  // Strategy 5: parse numeric from token as absolute last resort
-  const tokenMatch = String(tokenId).match(/(\d+)$/);
-  if (tokenMatch) {
-    const n = parseInt(tokenMatch[1], 10);
-    if (!isNaN(n) && n > 0) {
-      console.warn(`[resolveInstitutionId] No name match — token fallback ${n}`);
-      return n;
-    }
-  }
-
-  console.error(`[resolveInstitutionId] FAILED for token="${tokenId}" name="${name}"`);
-  return null;
-}
-
-function formatDate(d: Date): string {
-  return (
-    d.toLocaleDateString('en-GB', {
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-    }) +
-    ' at ' +
-    d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-  );
-}
-
-// Map API PendingApprovalItem → UI PendingInstitution shape
-function mapPendingApproval(item: PendingApprovalItem): PendingInstitution {
-  const dateIso = item.requested_date ?? item.created_at ?? null;
-  return {
-    id: String(item.id),
-    name: item.name,
-    type: (item.type ?? 'NGO') as PendingInstitution['type'],
-    region: item.region ?? '—',
-    contact: item.contact_person ?? item.contact_name ?? '—',
-    requestedDate: dateIso
-      ? new Date(dateIso).toLocaleDateString('en-GB', {
-          day: 'numeric', month: 'short', year: 'numeric',
-        })
-      : '—',
-    plan: item.requested_plan ?? item.license_plan ?? '—',
-  };
-}
-
 export default function AdminShell() {
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { toast, showToast } = useToast();
 
   // ─── Live API data ────────────────────────────────────────────────────────
@@ -144,9 +44,6 @@ export default function AdminShell() {
     facilities,
     loading: facilitiesLoading,
     suspend,
-    approve,
-    reject,
-    create: createFacility,
     update,
     extendTrial: doExtendTrial,
     refetch: refetchFacilities,
@@ -160,29 +57,16 @@ export default function AdminShell() {
   } = useDashboardAnalytics();
 
   // ─── Modals ───────────────────────────────────────────────────────────────
-  const createModal      = useModal();
-  const emailModal       = useModal();
-  const convertModal     = useModal();
-  const issueLicenseModal = useModal();
+  const addFacilityModal    = useModal();
+  const addInstitutionModal = useModal();
+  const convertModal        = useModal();
+  const issueLicenseModal   = useModal();
 
-  const [emailPreviewData, setEmailPreviewData] = useState<EmailPreviewData | null>(null);
-  const [pendingInstData, setPendingInstData]   = useState<PendingInstitutionData | null>(null);
   const [convertInstName, setConvertInstName]   = useState('');
   const [convertInstId, setConvertInstId]       = useState('');
   const [editingFacility, setEditingFacility]   = useState<FacilityResponse | null>(null);
-  // Track approved/rejected token IDs so we can remove them instantly from the list
-  const [dismissedTokens, setDismissedTokens]   = useState<Set<string>>(new Set());
   // Increment to force LicensesView to reload after issuing a license
   const [licenseRefreshKey, setLicenseRefreshKey] = useState(0);
-
-  // ─── Derived UI data from dashboard API ──────────────────────────────────
-  const pendingApprovals = useMemo<PendingInstitution[]>(
-    () =>
-      (dashboardData?.pendingApprovals ?? [])
-        .map(mapPendingApproval)
-        .filter((p) => !dismissedTokens.has(p.id)),
-    [dashboardData, dismissedTokens],
-  );
 
   const topInstitutions = useMemo<TopInstitutionItem[]>(
     () => dashboardData?.topInstitutions ?? [],
@@ -191,97 +75,23 @@ export default function AdminShell() {
 
   // ─── Sidebar stats ────────────────────────────────────────────────────────
   const sidebarStats: SidebarStats = useMemo(() => ({
-    totalInstitutions: facilities.length,
+    totalFacilities:   facilities.filter((f) => f._entity_type === 'facility' || !f._entity_type).length,
+    totalInstitutions: facilities.filter((f) => f._entity_type === 'institution').length,
     activeLicenses:    dashboardData?.activeInstitutions ?? 0,
     totalScreened:     dashboardData?.totalScreened ?? 0,
     onTreatment:       dashboardData?.onActiveTreatment ?? 0,
-    pendingApproval:   pendingApprovals.length,
-  }), [facilities, dashboardData, pendingApprovals]);
+    pendingApproval:   0,
+  }), [facilities, dashboardData]);
 
   // ─── Navigation ───────────────────────────────────────────────────────────
-  const handleNavigate = useCallback((view: ViewId) => setActiveView(view), []);
-
-  const handleApprove = useCallback(
-    async (tokenId: string, name: string) => {
-      try {
-        // If institutions haven't loaded yet, refetch first
-        let facilityList = facilities;
-        if (facilityList.length === 0) {
-          await refetchFacilities();
-          // Give state time to update — use a fresh fetch instead
-          const { listInstitutions } = await import('@/services/institutions.service');
-          facilityList = await listInstitutions();
-        }
-
-        const numericId = resolveInstitutionId(tokenId, name, facilityList);
-        if (numericId === null) {
-          showToast(`Cannot find institution "${name}" — refresh and try again`, 'warn');
-          return;
-        }
-
-        console.log(`[Approve] Resolved id=${numericId} for token="${tokenId}" name="${name}"`);
-
-        // 1. Call the action endpoint
-        try { await approve(numericId); } catch { /* continue to status update */ }
-
-        // 2. Also PATCH status to ensure activation is persisted — the action endpoint
-        //    may not be writing to DB correctly on the backend side
-        try {
-          const { updateInstitutionStatus } = await import('@/services/institutions.service');
-          await updateInstitutionStatus(numericId, true);
-          console.log(`[Approve] PATCH /status active=true → id=${numericId} ✓`);
-        } catch (e) {
-          console.warn('[Approve] Status patch failed:', e);
-        }
-
-        setDismissedTokens((prev) => new Set(prev).add(tokenId));
-        showToast(`✓ ${name} approved and activated`, 'success');
-        refetchDashboard();
-        refetchFacilities();
-      } catch (err: unknown) {
-        const axiosErr = err as { response?: { status?: number; data?: unknown } };
-        const status = axiosErr.response?.status;
-        const detail = axiosErr.response?.data
-          ? JSON.stringify(axiosErr.response.data)
-          : 'no detail';
-        console.error(`[Approve] Failed for "${name}":`, status, detail);
-        showToast(`Approve failed for ${name} (HTTP ${status ?? 'no response'}) — ${detail}`, 'warn');
-      }
-    },
-    [approve, facilities, showToast, refetchDashboard, refetchFacilities],
-  );
-
-  const handleReject = useCallback(
-    async (tokenId: string, name: string) => {
-      try {
-        let facilityList = facilities;
-        if (facilityList.length === 0) {
-          const { listInstitutions } = await import('@/services/institutions.service');
-          facilityList = await listInstitutions();
-        }
-
-        const numericId = resolveInstitutionId(tokenId, name, facilityList);
-        if (numericId === null) {
-          showToast(`Cannot find institution "${name}" — refresh and try again`, 'warn');
-          return;
-        }
-        await reject(numericId);
-        setDismissedTokens((prev) => new Set(prev).add(tokenId));
-        showToast(`${name} has been rejected`, 'warn');
-        refetchDashboard();
-        refetchFacilities();
-      } catch (err: unknown) {
-        const axiosErr = err as { response?: { status?: number; data?: unknown } };
-        console.error(`[Reject] Failed for "${name}":`, axiosErr.response?.status, axiosErr.response?.data);
-        showToast(`Failed to reject ${name} — try again`, 'warn');
-      }
-    },
-    [reject, facilities, showToast, refetchDashboard, refetchFacilities],
-  );
+  const handleNavigate = useCallback((view: ViewId) => {
+    setActiveView(view);
+    setSidebarOpen(false);
+  }, []);
 
   // ─── Suspend / reactivate ─────────────────────────────────────────────────
   const handleSuspend = useCallback(
-    async (id: number, isActive: boolean, name: string) => {
+    async (id: string, isActive: boolean, name: string) => {
       try {
         await suspend(id, isActive);
         showToast(
@@ -301,7 +111,7 @@ export default function AdminShell() {
 
   // ─── Extend trial ─────────────────────────────────────────────────────────
   const handleExtendTrial = useCallback(
-    async (id: number, name: string) => {
+    async (id: string, name: string) => {
       try {
         await doExtendTrial(id, 30);
         showToast(`✓ Trial extended by 30 days for ${name}`, 'success');
@@ -315,10 +125,11 @@ export default function AdminShell() {
   // ─── Edit institution ─────────────────────────────────────────────────────
   const handleEditSave = useCallback(
     async (data: EditInstitutionForm) => {
+      console.log('Editing institution id:', editingFacility?.id);
       if (!editingFacility) return;
       try {
         await update(editingFacility.id, {
-          name:         data.name,
+          name:         data.name || undefined,
           type:         data.type || undefined,
           region:       data.region || undefined,
           contact_name: data.contact || undefined,
@@ -326,9 +137,9 @@ export default function AdminShell() {
           license_plan: data.plan || undefined,
           seats:        data.seats ? Number(data.seats) : undefined,
         });
-        showToast(`✓ ${data.name} updated`, 'success');
+        showToast(`${data.name} updated`, 'success');
+        await refetchFacilities();
         setEditingFacility(null);
-        refetchFacilities();
       } catch {
         showToast('Failed to save changes — try again', 'warn');
       }
@@ -337,113 +148,13 @@ export default function AdminShell() {
   );
 
   // ─── Create institution ───────────────────────────────────────────────────
-  const handleCreateSubmit = useCallback(
-    (data: CreateInstitutionForm) => {
-      if (!data.name.trim() || !data.email.trim()) {
-        showToast('Please fill in institution name and admin email');
-        return;
-      }
-
-      const expiry = data.plan.includes('Trial') ? '30 days from activation' : '31 Dec 2026';
-      const now = new Date();
-
-      const preview: EmailPreviewData = {
-        toField:      `${data.contact || 'Admin'} <${data.email}>`,
-        dateField:    formatDate(now),
-        subject:      `Your Afya account is ready — ${data.name}`,
-        contactName:  data.contact || 'there',
-        orgName:      data.name,
-        infoOrg:      data.name,
-        infoType:     data.type || '—',
-        infoRegion:   data.region || '—',
-        infoEmail:    data.email,
-        infoPlan:     data.plan || '—',
-        infoSeats:    `${data.seats || '—'} seats`,
-        infoExpiry:   expiry,
-        token:        'AFYA-XXXX-XXXX-XXXX',
-      };
-
-      const pending: PendingInstitutionData = {
-        name:    data.name,
-        email:   data.email,
-        contact: data.contact,
-        type:    data.type,
-        region:  data.region,
-        plan:    data.plan,
-        seats:   data.seats || '—',
-        token:   'AFYA-XXXX-XXXX-XXXX',
-        phone:   data.phone,
-        notes:   data.notes,
-      };
-
-      setEmailPreviewData(preview);
-      setPendingInstData(pending);
-      createModal.close();
-      emailModal.open();
-    },
-    [createModal, emailModal, showToast],
-  );
-
-  // ─── Send onboarding email — calls POST /super-admin/institutions ─────────
-  const handleEmailSent = useCallback(
-    async (data: PendingInstitutionData): Promise<string | null> => {
-      try {
-        const payload: InstitutionCreatePayload = {
-          name:         data.name,
-          email:        data.email,
-          contact_name: data.contact || data.name,
-          region:       data.region || undefined,
-          license_plan: data.plan || '30-day Free Trial',
-          phone:        data.phone || undefined,
-          type:         data.type || undefined,
-          seats:        data.seats && data.seats !== '—' ? Number(data.seats) : undefined,
-          notes:        data.notes || undefined,
-        };
-        await createFacility(payload);
-
-        // POST /super-admin/institutions returns {} — no token in response.
-        // Fetch the pending-approvals list and find the token for this institution
-        // by matching email or name. This is the only way to get the real token
-        // from the current API.
-        let realToken: string | null = null;
-        try {
-          const { default: apiClient } = await import('@/lib/api');
-          const dashRes = await apiClient.get<unknown>('/api/v1/super-admin/dashboard', {
-            params: { include: 'pending-approvals' },
-          });
-          const raw = dashRes.data as Record<string, unknown>;
-          const approvals = (
-            Array.isArray(raw['pending_approvals'])
-              ? raw['pending_approvals']
-              : []
-          ) as Array<Record<string, unknown>>;
-
-          // Match by email first, then name
-          const match = approvals.find(
-            (a) =>
-              (a['email'] as string | undefined)?.toLowerCase() === data.email.toLowerCase() ||
-              (a['name'] as string | undefined)?.toLowerCase() === data.name.toLowerCase(),
-          );
-          if (match) {
-            realToken = (match['token'] ?? match['setup_token'] ?? null) as string | null;
-            console.log('[CreateInstitution] Found real token for', data.name, '→', realToken);
-          }
-        } catch (tokenErr) {
-          console.warn('[CreateInstitution] Could not fetch real token (non-critical):', tokenErr);
-        }
-
-        showToast(`✓ ${data.name} created — onboarding email sent to ${data.email}`, 'success');
-        refetchFacilities();
-        refetchDashboard();
-        return realToken;
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Failed to create institution';
-        showToast(`Error: ${msg}`, 'warn');
-        throw err;
-      }
-    },
-    [createFacility, showToast, refetchFacilities, refetchDashboard],
-  );
+  // ─── Create institution — two-step modal now handles API calls internally ──
+  // CreateInstitutionModal calls registerInstitution() + registerFacility() directly.
+  // AdminShell only needs to refresh lists when the modal reports success.
+  const handleOrgComplete = useCallback(() => {
+    refetchFacilities();
+    refetchDashboard();
+  }, [refetchFacilities, refetchDashboard]);
 
   // ─── Convert trial — calls POST /super-admin/licenses/{id}/convert-trial ──
   const handleConvertTrial = useCallback(
@@ -471,39 +182,35 @@ export default function AdminShell() {
     [convertInstId, convertInstName, showToast, refetchFacilities],
   );
 
-  // ─── Issue license — handled by LicensesView itself now ──────────────────
-  // ─── Issue license — calls POST /super-admin/licenses with full form data ──
+  // ─── Issue license — PUT /super-admin/institutions/{id} ──────────────────
+  // NEVER use POST /super-admin/licenses here — that creates a duplicate record.
   const handleIssueLicense = useCallback(
-    async (data: IssueLicenseForm) => {
+    async (data: { facilityId: string; plan: string; seats: number | null; startDate: string; paymentMethod: string; notes: string }) => {
       if (!data.facilityId || !data.plan) {
         showToast('Please select an institution and plan', 'warn');
         return;
       }
       try {
-        // Find institution name from facilities list
         const facility = facilities.find((f) => f.id === data.facilityId);
-        const institutionName = facility?.name ?? data.institution;
+        const name = facility?.name ?? `Institution #${data.facilityId}`;
 
-        await issueLicense({
-          institution_name: institutionName,
-          plan:             data.plan,
-          start_date:       data.startDate || new Date().toISOString().split('T')[0],
-          seats:            data.seats ? Number(data.seats) : undefined,
-          payment_method:   data.paymentMethod || undefined,
-          notes:            data.notes || undefined,
-          amount:           extractAmountFromPlan(data.plan) || undefined,
+        // Update the existing institution's license plan and seat count
+        await update(data.facilityId, {
+          license_plan: data.plan,
+          ...(data.seats != null ? { seats: data.seats } : {}),
         });
 
-        showToast(`✓ License issued for ${institutionName}`, 'success');
+        console.log('[IssueLicense] Updated', name, '— plan:', data.plan, 'seats:', data.seats, 'start:', data.startDate, 'method:', data.paymentMethod, 'notes:', data.notes);
+        showToast(`✓ License updated for ${name}`, 'success');
         refetchFacilities();
         setLicenseRefreshKey((k) => k + 1);
       } catch (err: unknown) {
         const status = (err as { response?: { status?: number } }).response?.status;
         console.error('[IssueLicense] Failed:', status, err);
-        showToast(`Failed to issue license — try again`, 'warn');
+        throw err; // re-throw so the modal can show its own error state
       }
     },
-    [facilities, showToast, refetchFacilities],
+    [facilities, update, showToast, refetchFacilities],
   );
 
   // ─── Dashboard export ─────────────────────────────────────────────────────
@@ -519,26 +226,32 @@ export default function AdminShell() {
 
   return (
     <>
+      <Topbar onMenuToggle={() => setSidebarOpen(v => !v)} />
       <div className="app-body">
+        {/* Mobile backdrop */}
+        <div
+          className={`sidebar-backdrop${sidebarOpen ? ' open' : ''}`}
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
         <Sidebar
           activeView={activeView}
           onNavigate={handleNavigate}
-          pendingCount={pendingApprovals.length}
+          pendingCount={0}
           stats={sidebarStats}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
         />
 
         <main className="main">
           {/* Dashboard */}
           <div className={`view${activeView === 'dashboard' ? ' active' : ''}`}>
             <DashboardView
-              onAddInstitution={createModal.open}
               onViewAllInstitutions={() => handleNavigate('institutions')}
               onToast={showToast}
               onExportReport={handleDashboardExport}
-              pendingApprovals={pendingApprovals}
               topInstitutions={topInstitutions}
-              onApprove={handleApprove}
-              onReject={handleReject}
+              organisations={facilities}
               activeInstitutions={dashboardData?.activeInstitutions ?? 0}
               totalInstitutions={facilities.length}
               totalScreened={dashboardData?.totalScreened ?? 0}
@@ -550,12 +263,13 @@ export default function AdminShell() {
             />
           </div>
 
-          {/* Institutions */}
+          {/* Organisations (Facilities + Institutions) */}
           <div className={`view${activeView === 'institutions' ? ' active' : ''}`}>
             <InstitutionsView
               facilities={facilities}
               loading={facilitiesLoading}
-              onAddInstitution={createModal.open}
+              onAddFacility={addFacilityModal.open}
+              onAddInstitution={addInstitutionModal.open}
               onEdit={(facility) => setEditingFacility(facility)}
               onSuspend={handleSuspend}
               onExtendTrial={handleExtendTrial}
@@ -566,8 +280,6 @@ export default function AdminShell() {
           {/* Licenses — self-contained, uses own API calls */}
           <div className={`view${activeView === 'licenses' ? ' active' : ''}`}>
             <LicensesView
-              onIssueLicense={issueLicenseModal.open}
-              onConvertTrial={handleConvertTrial}
               onToast={showToast}
               refreshKey={licenseRefreshKey}
             />
@@ -601,18 +313,18 @@ export default function AdminShell() {
       </div>
 
       {/* ── Modals ── */}
-      <CreateInstitutionModal
-        isOpen={createModal.isOpen}
-        onClose={createModal.close}
-        onSubmit={handleCreateSubmit}
+      <AddFacilityModal
+        isOpen={addFacilityModal.isOpen}
+        onClose={addFacilityModal.close}
+        onComplete={handleOrgComplete}
+        onToast={showToast}
       />
 
-      <EmailPreviewModal
-        isOpen={emailModal.isOpen}
-        onClose={emailModal.close}
-        emailData={emailPreviewData}
-        pendingData={pendingInstData}
-        onSent={handleEmailSent}
+      <AddInstitutionModal
+        isOpen={addInstitutionModal.isOpen}
+        onClose={addInstitutionModal.close}
+        onComplete={handleOrgComplete}
+        onToast={showToast}
       />
 
       <ConvertTrialModal
@@ -640,8 +352,10 @@ export default function AdminShell() {
             region:  editingFacility.region ?? '',
             contact: editingFacility.contact_name ?? '',
             email:   editingFacility.email ?? '',
-            plan:    editingFacility.license_plan ?? '',
-            seats:   editingFacility.max_seats != null ? String(editingFacility.max_seats) : '',
+            plan:    editingFacility.license_plan ?? editingFacility.plan ?? '',
+            seats:   (editingFacility.seats ?? editingFacility.max_seats) != null
+                       ? String(editingFacility.seats ?? editingFacility.max_seats)
+                       : '',
           }}
           onSave={handleEditSave}
         />

@@ -1,361 +1,520 @@
+#!/usr/bin/env python3
 """
-Afya Super Admin — URL Remapping Verification
-==============================================
-The backend built a dedicated /api/v1/super-admin/* prefix for everything.
-Your frontend is calling OLD paths that either don't exist or return wrong data.
+diagnose_dashboard_500.py
 
-This script:
-1. Confirms every new super-admin endpoint is live
-2. Shows you exactly what to change in your frontend service files
-3. Checks the new FacilityResponse fields that are now available
+Static diagnostic for the error:
 
-Run:
-    python afya_remap_check.py
+    [Dashboard] Error: "Request failed with status code 500" "HTTP:" 500
+        at useDashboardAnalytics.useCallback[fetch] (hooks/useAnalytics.ts:108:15)
+
+This script does NOT call your API. It cannot see your external backend's logs
+or fix a bug on that server. What it CAN do is statically scan your Next.js
+project to find every plausible client-side reason the request to your
+external backend would come back as / be reported as a 500, rank them by
+likelihood, and tell you exactly what to check next (including what to look
+for in the external backend's own logs, since that is the most likely place
+the real root cause lives).
+
+USAGE
+-----
+    cp diagnose_dashboard_500.py <your-project-root>/
+    cd <your-project-root>
+    python3 diagnose_dashboard_500.py
+
+    # Or point it at a project elsewhere:
+    python3 diagnose_dashboard_500.py /path/to/project
+
+No third-party packages required (stdlib only).
 """
 
-import requests
-from datetime import datetime
+from __future__ import annotations
 
-BASE_URL = "https://aa86-2605-59c0-1fc5-cd08-79a9-a618-4600-e8b2.ngrok-free.app"
-EMAIL    = "admin@afya.com"
-PASSWORD = "Password123"
+import os
+import re
+import sys
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
 
-PASS = "✅"
-EMPTY = "🟡"
-FAIL  = "🔴"
-MISS  = "❌"
-NEW   = "🆕"
 
-results = []
+# ──────────────────────────────────────────────────────────────────────────
+# Data model
+# ──────────────────────────────────────────────────────────────────────────
 
-def check(label, method, path, expected_was=None, **kwargs):
-    url = f"{BASE_URL}{path}"
+@dataclass
+class Finding:
+    severity: str          # "HIGH" | "MEDIUM" | "LOW" | "INFO"
+    title: str
+    detail: str
+    location: Optional[str] = None   # "path:line"
+    next_step: str = ""
+
+    def sort_key(self):
+        order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2, "INFO": 3}
+        return order.get(self.severity, 4)
+
+
+@dataclass
+class Report:
+    findings: list = field(default_factory=list)
+
+    def add(self, *args, **kwargs):
+        self.findings.append(Finding(*args, **kwargs))
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────────────────
+
+SEARCH_DIRS_SKIP = {
+    "node_modules", ".next", ".git", "dist", "build", ".turbo", "coverage",
+}
+
+CODE_EXTS = {".ts", ".tsx", ".js", ".jsx"}
+
+
+def iter_source_files(root: Path):
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in SEARCH_DIRS_SKIP and not d.startswith(".")]
+        for fn in filenames:
+            p = Path(dirpath) / fn
+            if p.suffix in CODE_EXTS:
+                yield p
+
+
+def read_text(path: Path) -> str:
     try:
-        resp = method(url, timeout=10, **kwargs)
-        code = resp.status_code
-        if code == 404:
-            results.append((MISS, label, f"404 — not found", expected_was))
-            return None
-        if code == 401:
-            results.append((FAIL, label, f"401 Unauthorized", expected_was))
-            return None
-        if code >= 500:
-            results.append((FAIL, label, f"{code} Server Error", expected_was))
-            return None
-        if code >= 400:
-            results.append((FAIL, label, f"{code} — {resp.text[:100]}", expected_was))
-            return None
-        try:
-            data = resp.json()
-        except Exception:
-            length = len(resp.content)
-            status = PASS if length > 0 else EMPTY
-            results.append((status, label, f"200 OK — {length} bytes", expected_was))
-            return resp
-        if isinstance(data, list):
-            status = PASS if data else EMPTY
-            results.append((status, label, f"200 OK — {len(data)} items", expected_was))
-        elif isinstance(data, dict):
-            status = PASS if data else EMPTY
-            preview = ", ".join(f"{k}={str(v)[:25]}" for k, v in list(data.items())[:4])
-            results.append((status, label, f"200 OK — {preview}", expected_was))
-        return data
-    except Exception as e:
-        results.append((FAIL, label, str(e)[:80], expected_was))
+        return path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def find_file_by_name(root: Path, name_fragment: str) -> list[Path]:
+    """Find files whose name contains name_fragment (case-insensitive)."""
+    matches = []
+    for f in iter_source_files(root):
+        if name_fragment.lower() in f.name.lower():
+            matches.append(f)
+    return matches
+
+
+def line_of_match(text: str, match_start: int) -> int:
+    return text.count("\n", 0, match_start) + 1
+
+
+def rel(root: Path, p: Path) -> str:
+    try:
+        return str(p.relative_to(root))
+    except ValueError:
+        return str(p)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Checks
+# ──────────────────────────────────────────────────────────────────────────
+
+def check_analytics_service(root: Path, report: Report) -> Optional[Path]:
+    """Find the service file that getDashboard() lives in."""
+    candidates = find_file_by_name(root, "analytics.service")
+    if not candidates:
+        report.add(
+            severity="HIGH",
+            title="Could not find analytics.service.ts/js",
+            detail=(
+                "useAnalytics.ts imports getDashboard() from '@/services/analytics.service', "
+                "but no matching file was found under this project root. This is the file that "
+                "actually builds the URL, sets headers, and calls axios/fetch for the dashboard "
+                "endpoint -- it's the single most important file for this bug and it's missing "
+                "or located somewhere this scan didn't search."
+            ),
+            next_step=(
+                "Confirm the file exists (check for path alias issues -- does '@/services' "
+                "actually resolve to where you think? check tsconfig.json 'paths'), then run "
+                "this script again from a directory that includes it, or move it under this "
+                "project root before scanning."
+            ),
+        )
         return None
 
-# ── Login ─────────────────────────────────────────────────────────────────────
-print("=" * 72)
-print("  AFYA — NEW SUPER-ADMIN ENDPOINT VERIFICATION")
-print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-print("=" * 72)
+    for f in candidates:
+        report.add(
+            severity="INFO",
+            title="Found analytics service file",
+            detail="This is the file that builds the request to your external backend.",
+            location=rel(root, f),
+        )
+    return candidates[0]
 
-resp = requests.post(
-    f"{BASE_URL}/api/v1/users/login",
-    json={"username_or_email": EMAIL, "password": PASSWORD}, timeout=10
-)
-resp.raise_for_status()
-H = {"Authorization": f"Bearer {resp.json()['access_token']}", "ngrok-skip-browser-warning": "true"}
-print("✅ Logged in\n")
 
-# Get first facility/user IDs
-facs = requests.get(f"{BASE_URL}/api/v1/facilities/", headers=H, timeout=10).json()
-fid = facs[0]["id"] if facs else 1
-users = requests.get(f"{BASE_URL}/api/v1/users/", headers=H, timeout=10).json()
-uid = users[0]["id"] if users else 1
+def check_base_url_construction(root: Path, service_file: Optional[Path], report: Report):
+    files_to_scan = [service_file] if service_file else []
+    # also scan for a shared axios instance / api client
+    files_to_scan += find_file_by_name(root, "axios")
+    files_to_scan += find_file_by_name(root, "apiClient")
+    files_to_scan += find_file_by_name(root, "api-client")
+    files_to_scan = [f for f in files_to_scan if f]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DASHBOARD
-# ─────────────────────────────────────────────────────────────────────────────
-print("─" * 72)
-print("  DASHBOARD")
-print("─" * 72)
-print("  OLD path your frontend uses → NEW correct path\n")
+    if not files_to_scan:
+        return
 
-check("Dashboard summary KPIs",
-    requests.get, "/api/v1/super-admin/dashboard/summary", headers=H,
-    expected_was="/api/v1/analytics/summary")
+    env_var_pattern = re.compile(r"process\.env\.([A-Z0-9_]+)")
+    base_url_pattern = re.compile(r"(baseURL|BASE_URL|baseUrl)\s*[:=]\s*([^\n,;]+)", re.IGNORECASE)
 
-check("Screenings trend chart (6 months)",
-    requests.get, "/api/v1/super-admin/dashboard/screenings-trend", headers=H,
-    expected_was="/api/v1/analytics/timeline")
+    seen_vars = set()
+    for f in set(files_to_scan):
+        text = read_text(f)
+        if not text:
+            continue
 
-check("BP distribution chart",
-    requests.get, "/api/v1/super-admin/dashboard/bp-distribution", headers=H,
-    expected_was="/api/v1/analytics/summary → bp_distribution_percentages")
+        for m in base_url_pattern.finditer(text):
+            line = line_of_match(text, m.start())
+            report.add(
+                severity="INFO",
+                title="Base URL construction found",
+                detail=f"Expression: {m.group(0).strip()}",
+                location=f"{rel(root, f)}:{line}",
+            )
 
-check("Pending approvals list",
-    requests.get, "/api/v1/super-admin/dashboard/pending-approvals", headers=H,
-    expected_was="derived from /facilities/ (inactive filter)")
+        for m in env_var_pattern.finditer(text):
+            var = m.group(1)
+            if var in seen_vars:
+                continue
+            seen_vars.add(var)
+            line = line_of_match(text, m.start())
 
-check("Top institutions table",
-    requests.get, "/api/v1/super-admin/dashboard/top-institutions", headers=H,
-    expected_was="hardcoded zeros in AdminShell.tsx")
+            # Is there a fallback if missing? e.g. `|| 'http://localhost'`
+            snippet_start = max(0, m.start() - 5)
+            snippet_end = min(len(text), m.end() + 60)
+            snippet = text[snippet_start:snippet_end]
+            has_fallback = "||" in snippet or "??" in snippet
 
-check("Export dashboard report CSV",
-    requests.get, "/api/v1/super-admin/dashboard/export-report", headers=H,
-    expected_was="/api/v1/analytics/export-csv")
+            severity = "LOW" if has_fallback else "HIGH"
+            report.add(
+                severity=severity,
+                title=f"Env var used in request config: {var}",
+                detail=(
+                    f"{'Has a fallback value, lower risk.' if has_fallback else 'No fallback detected -- if this var is unset at runtime, the request URL or header built from it will silently contain the literal string \"undefined\".'}"
+                ),
+                location=f"{rel(root, f)}:{line}",
+                next_step=(
+                    f"Check that {var} is actually set in the environment Next.js runs in "
+                    f"(.env.local for dev, your hosting platform's env settings for prod). "
+                    f"A request to a URL like 'undefined/api/dashboard' or 'https://undefined.example.com' "
+                    f"will fail, and depending on your backend/proxy/DNS setup this can surface as a 500."
+                ) if severity == "HIGH" else "",
+            )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# INSTITUTIONS
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n─" * 72)
-print("\n  INSTITUTIONS")
-print("─" * 72)
+    if not seen_vars:
+        report.add(
+            severity="MEDIUM",
+            title="No process.env usage found in API client files",
+            detail=(
+                "Either the base URL is hardcoded (fine, but check it's correct for this "
+                "environment) or env vars are referenced somewhere this scan didn't check "
+                "(e.g. a config file using import.meta.env, or a non-standard naming pattern)."
+            ),
+        )
 
-check("List institutions (with type/search/status filters)",
-    requests.get, "/api/v1/super-admin/institutions", headers=H,
-    expected_was="/api/v1/facilities/")
 
-check("Create institution",
-    requests.get, "/api/v1/super-admin/institutions", headers=H,
-    expected_was="POST /api/v1/facilities/")
+def check_env_files(root: Path, report: Report):
+    env_files = sorted(root.glob(".env*"))
+    if not env_files:
+        report.add(
+            severity="MEDIUM",
+            title="No .env files found at project root",
+            detail=(
+                "If your API base URL or auth config depends on environment variables, and "
+                "there's no .env.local / .env.development here, Next.js may be running with "
+                "those vars completely unset."
+            ),
+            next_step="Verify where your env vars actually come from (shell export, .env.local, hosting platform).",
+        )
+        return
 
-check("Update institution (edit modal)",
-    requests.put, f"/api/v1/super-admin/institutions/{fid}",
-    headers=H, json={"name": facs[0]["name"]},
-    expected_was="PATCH /api/v1/facilities/{id} — was 405")
+    defined_keys = set()
+    for ef in env_files:
+        text = read_text(ef)
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            defined_keys.add(key)
+            if key and not value:
+                report.add(
+                    severity="HIGH",
+                    title=f"Env var defined but EMPTY: {key}",
+                    detail=f"Found in {ef.name} with no value after '='.",
+                    location=ef.name,
+                    next_step="Set a real value, or remove the line if unused.",
+                )
 
-check("Update institution status (suspend/reactivate)",
-    requests.patch, f"/api/v1/super-admin/institutions/{fid}/status",
-    headers=H, json={"is_active": True},
-    expected_was="PATCH /api/v1/facilities/{id}/suspend")
+    report.add(
+        severity="INFO",
+        title="Env files found",
+        detail=f"Keys defined: {', '.join(sorted(defined_keys)) if defined_keys else '(none parsed)'}",
+        location=", ".join(f.name for f in env_files),
+    )
 
-check("Approve OR reject institution",
-    requests.post, f"/api/v1/super-admin/institutions/{fid}/action",
-    headers=H, json={"action": "approve"},
-    expected_was="reject was 404 — now both approve+reject in one endpoint")
 
-check("Extend trial",
-    requests.post, f"/api/v1/super-admin/institutions/{fid}/extend-trial",
-    headers=H, json={"days": 7},
-    expected_was="was missing entirely")
+def check_auth_service(root: Path, report: Report):
+    candidates = find_file_by_name(root, "authService")
+    if not candidates:
+        report.add(
+            severity="MEDIUM",
+            title="Could not find authService.ts/js",
+            detail=(
+                "useAnalytics.ts gates its fetch on getAccessToken() and presumably the service "
+                "layer attaches this token as an Authorization header. Couldn't locate this file "
+                "to check whether the token can be stale/expired/malformed without the app noticing."
+            ),
+        )
+        return
 
-check("Resend onboarding email",
-    requests.post, f"/api/v1/super-admin/institutions/{fid}/resend-onboarding",
-    headers=H,
-    expected_was="was missing entirely")
+    for f in candidates:
+        text = read_text(f)
+        loc = rel(root, f)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LICENSES
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n─" * 72)
-print("\n  LICENSES")
-print("─" * 72)
+        if "localStorage" in text or "sessionStorage" in text:
+            report.add(
+                severity="MEDIUM",
+                title="Access token read from browser storage",
+                detail=(
+                    "Token is stored client-side. If it's expired, malformed, or was cleared "
+                    "inconsistently (e.g. cleared from one tab but not memory state in another), "
+                    "a stale/invalid token gets sent on every request. Many backends correctly "
+                    "return 401 for bad auth, but some implementations throw an unhandled "
+                    "exception while *decoding* a malformed/expired token and return 500 instead "
+                    "of 401 -- this is a very common cause of '500 that's really an auth problem'."
+                ),
+                location=loc,
+                next_step=(
+                    "On the backend, check logs for a stack trace from JWT decode/verify around "
+                    "the time of the error. If found, the fix is on the backend (return 401 on "
+                    "decode failure) and/or on the frontend (proactively check token expiry "
+                    "before firing the request, or refresh-and-retry on 401)."
+                ),
+            )
 
-check("License summary KPIs (active, expiring, seat utilisation)",
-    requests.get, "/api/v1/super-admin/licenses/summary", headers=H,
-    expected_was="derived client-side from facilities list")
+        if not re.search(r"exp(iry|ires)?", text, re.IGNORECASE):
+            report.add(
+                severity="LOW",
+                title="No expiry check found in authService",
+                detail="No reference to token expiry/exp found -- token may be sent even when expired.",
+                location=loc,
+            )
 
-check("List all licenses",
-    requests.get, "/api/v1/super-admin/licenses", headers=H,
-    expected_was="derived from /api/v1/facilities/")
 
-check("Issue new license",
-    requests.get, "/api/v1/super-admin/licenses", headers=H,
-    expected_was="POST /api/v1/facilities/ (was creating new facility, wrong)")
+def check_swallowed_errors(root: Path, report: Report):
+    """Specifically check useAnalytics.ts (and similar hooks) for the pattern
+    where the real backend error body is discarded before logging."""
+    candidates = find_file_by_name(root, "useAnalytics")
+    for f in candidates:
+        text = read_text(f)
+        loc = rel(root, f)
 
-check("Renew license",
-    requests.post, f"/api/v1/super-admin/licenses/{fid}/renew",
-    headers=H,
-    expected_was="POST /facilities/{id}/renew — was 404")
+        # err.response?.status captured, but err.response?.data is not
+        if re.search(r"response\?\.status", text) and not re.search(r"response\?\.data", text):
+            m = re.search(r"console\.error\(['\"]\[\w+\] Error:?['\"]", text)
+            line = line_of_match(text, m.start()) if m else None
+            report.add(
+                severity="HIGH",
+                title="Backend error response body is discarded",
+                detail=(
+                    "The catch block reads err.response?.status but never reads "
+                    "err.response?.data. Most backends (Express, FastAPI, Django, etc.) put the "
+                    "real error message/code in the response body on a 500 -- right now that "
+                    "message is thrown away before it ever reaches your console.error, which is "
+                    "exactly why you're only seeing a bare status code and nothing actionable."
+                ),
+                location=f"{loc}:{line}" if line else loc,
+                next_step=(
+                    "Temporarily add `(err as any).response?.data` to the console.error call "
+                    "(or log it separately) and reproduce the error. That will surface the "
+                    "backend's actual error message/code without needing backend log access."
+                ),
+            )
 
-check("Send renewal reminder",
-    requests.post, f"/api/v1/super-admin/licenses/{fid}/send-reminder",
-    headers=H,
-    expected_was="POST /facilities/{id}/send-renewal-email — was 404")
+        if "axios" not in text and ("getDashboard" in text):
+            report.add(
+                severity="INFO",
+                title="useAnalytics.ts does not import axios directly",
+                detail="Confirms the actual HTTP call is delegated to the service layer (analytics.service.ts).",
+                location=loc,
+            )
 
-check("Convert trial to paid",
-    requests.post, f"/api/v1/super-admin/licenses/{fid}/convert-trial",
-    headers=H, json={"plan": "Annual Standard (10 seats)", "payment_method": "Bank Transfer"},
-    expected_was="was calling suspend endpoint (wrong)")
 
-check("Send renewal email",
-    requests.post, f"/api/v1/super-admin/licenses/{fid}/send-renewal-email",
-    headers=H,
-    expected_was="was missing")
+def check_axios_global_config(root: Path, report: Report):
+    """Look for axios interceptors / instance config that might rewrite errors,
+    set timeouts, or strip data in a way that hides the real cause."""
+    pkg = root / "package.json"
+    if pkg.exists():
+        pkg_data = json.loads(read_text(pkg) or "{}")
+        deps = {**pkg_data.get("dependencies", {}), **pkg_data.get("devDependencies", {})}
+        if "axios" in deps:
+            report.add(
+                severity="INFO",
+                title=f"axios version: {deps['axios']}",
+                detail="Confirmed in package.json.",
+            )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# ANALYTICS
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n─" * 72)
-print("\n  ANALYTICS")
-print("─" * 72)
+    interceptor_files = []
+    for f in iter_source_files(root):
+        text = read_text(f)
+        if "interceptors.response" in text or "interceptors.request" in text:
+            interceptor_files.append((f, text))
 
-check("Analytics KPIs (screened, detected, referred, follow-up)",
-    requests.get, "/api/v1/super-admin/analytics/summary", headers=H,
-    expected_was="/api/v1/analytics/summary")
+    if not interceptor_files:
+        report.add(
+            severity="LOW",
+            title="No axios interceptors found",
+            detail="If you intended global error/auth handling (e.g. auto-refresh on 401), it doesn't exist yet, or lives outside this scan.",
+        )
+        return
 
-breakdowns = check("ALL chart breakdowns in ONE call (region/age/gender/risk/detection)",
-    requests.get, "/api/v1/super-admin/analytics/breakdowns", headers=H,
-    expected_was="was missing — caused 6 empty chart sections")
+    for f, text in interceptor_files:
+        loc = rel(root, f)
+        report.add(
+            severity="INFO",
+            title="Axios interceptor found",
+            detail="Worth checking this doesn't rewrite/suppress the original error before it reaches useAnalytics.ts's catch block.",
+            location=loc,
+        )
+        if re.search(r"return\s+Promise\.reject\(\s*\{", text):
+            report.add(
+                severity="MEDIUM",
+                title="Interceptor rejects with a custom object (not the original error)",
+                detail=(
+                    "If the response interceptor catches errors and rejects with a new plain "
+                    "object instead of re-throwing the original AxiosError, then "
+                    "`err.response?.status` and `err.response?.data` in useAnalytics.ts may not "
+                    "exist on that custom object -- which would explain a status of `undefined` "
+                    "even on a real 500."
+                ),
+                location=loc,
+                next_step="Confirm the rejected value still has a `.response` property matching the original AxiosError shape.",
+            )
 
-if isinstance(breakdowns, dict):
-    print(f"\n  Keys returned by /analytics/breakdowns:")
-    for k, v in breakdowns.items():
-        has_data = "✅ has data" if v and v != [] and v != {} else "🟡 empty"
-        print(f"    {k:<35} {has_data}")
 
-check("Institutions performance table",
-    requests.get, "/api/v1/super-admin/analytics/institutions-performance", headers=H,
-    expected_was="was missing")
+def check_timeout_config(root: Path, report: Report):
+    found = []
+    for f in iter_source_files(root):
+        text = read_text(f)
+        for m in re.finditer(r"timeout\s*:\s*(\d+)", text):
+            found.append((f, m, int(m.group(1))))
 
-check("Export analytics CSV",
-    requests.get, "/api/v1/super-admin/analytics/export", headers=H,
-    expected_was="/api/v1/analytics/export-csv")
+    for f, m, ms in found:
+        loc = rel(root, f)
+        line = line_of_match(read_text(f), m.start())
+        if ms < 5000:
+            report.add(
+                severity="LOW",
+                title=f"Short axios timeout: {ms}ms",
+                detail=(
+                    "A short timeout against a slow external backend can produce a client-side "
+                    "error that *looks* like a 500 if error handling normalizes timeouts and "
+                    "real server errors the same way. Worth ruling out if the backend is slow "
+                    "under load."
+                ),
+                location=f"{loc}:{line}",
+            )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# REVENUE
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n─" * 72)
-print("\n  REVENUE")
-print("─" * 72)
 
-check("Revenue summary KPIs (ARR, MRR, total, renewals due)",
-    requests.get, "/api/v1/super-admin/revenue/summary", headers=H,
-    expected_was="/api/v1/billing/monthly-summary — was 404")
+def check_cors_proxy_pattern(root: Path, report: Report):
+    """If calling an external backend directly from the client (not via a Next.js
+    API route), CORS preflight failures or mixed content can sometimes be
+    misreported. Check next.config for rewrites/proxy."""
+    next_config_candidates = list(root.glob("next.config.*"))
+    has_rewrite_proxy = False
+    for f in next_config_candidates:
+        text = read_text(f)
+        if "rewrites" in text:
+            has_rewrite_proxy = True
+            report.add(
+                severity="INFO",
+                title="next.config has rewrites()",
+                detail="Some requests may be proxied through Next.js rather than hitting the external backend directly from the browser.",
+                location=rel(root, f),
+            )
 
-check("Monthly revenue trend chart",
-    requests.get, "/api/v1/super-admin/revenue/monthly-trend", headers=H,
-    expected_was="/api/v1/billing/revenue-timeline — was 404")
+    if not has_rewrite_proxy:
+        report.add(
+            severity="INFO",
+            title="No Next.js rewrite proxy detected",
+            detail=(
+                "The dashboard call likely goes straight from the browser to the external "
+                "backend's domain. This means: (1) CORS must be configured correctly on that "
+                "backend for your frontend's origin, and (2) the 500 you're seeing is almost "
+                "certainly generated by that backend itself, not by Next.js -- so the real stack "
+                "trace lives in the EXTERNAL BACKEND's logs, not in the `next dev` terminal."
+            ),
+        )
 
-check("Revenue by institution type chart",
-    requests.get, "/api/v1/super-admin/revenue/by-type", headers=H,
-    expected_was="was missing")
 
-check("Transaction history table",
-    requests.get, "/api/v1/super-admin/revenue/transactions", headers=H,
-    expected_was="/api/v1/billing/transactions — was 404")
+# ──────────────────────────────────────────────────────────────────────────
+# Main
+# ──────────────────────────────────────────────────────────────────────────
 
-check("Export revenue CSV",
-    requests.get, "/api/v1/super-admin/revenue/export", headers=H,
-    expected_was="/api/v1/billing/export-csv — was 404")
+def main():
+    root = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path.cwd()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# USERS
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n─" * 72)
-print("\n  USERS")
-print("─" * 72)
+    if not root.exists():
+        print(f"Path does not exist: {root}")
+        sys.exit(1)
 
-check("List users (with last_login + facility name)",
-    requests.get, "/api/v1/super-admin/users", headers=H,
-    expected_was="/api/v1/users/ (missing last_login + facility name)")
+    print(f"Scanning project at: {root}\n")
 
-check("Get single user",
-    requests.get, f"/api/v1/super-admin/users/{uid}", headers=H,
-    expected_was="was missing")
+    report = Report()
 
-check("Suspend OR reactivate user",
-    requests.patch, f"/api/v1/super-admin/users/{uid}/status",
-    headers=H, json={"is_active": True},
-    expected_was="reactivate was 404 — now both in one endpoint")
+    service_file = check_analytics_service(root, report)
+    check_base_url_construction(root, service_file, report)
+    check_env_files(root, report)
+    check_auth_service(root, report)
+    check_swallowed_errors(root, report)
+    check_axios_global_config(root, report)
+    check_timeout_config(root, report)
+    check_cors_proxy_pattern(root, report)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# AUDIT LOG
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n─" * 72)
-print("\n  AUDIT LOG")
-print("─" * 72)
+    # ── Print report ────────────────────────────────────────────────────
+    findings = sorted(report.findings, key=lambda f: f.sort_key())
 
-check("Audit logs (all entries)",
-    requests.get, "/api/v1/super-admin/audit-logs", headers=H,
-    expected_was="/api/v1/users/activity-logs (was empty + missing agent_name)")
+    severity_icon = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🔵", "INFO": "⚪"}
 
-check("Export audit log CSV",
-    requests.get, "/api/v1/super-admin/audit-logs/export", headers=H,
-    expected_was="/api/v1/users/activity-logs/export-csv — was 404")
+    print("=" * 78)
+    print("DIAGNOSTIC REPORT: Dashboard 500 error (useAnalytics.ts:108)")
+    print("=" * 78)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# SETTINGS
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n─" * 72)
-print("\n  SETTINGS")
-print("─" * 72)
+    if not findings:
+        print("No findings -- this likely means the script couldn't locate enough "
+              "of the relevant files. Run it from your project root.")
+        return
 
-check("WhatsApp settings (GET)",
-    requests.get, "/api/v1/super-admin/settings/whatsapp", headers=H,
-    expected_was="/api/v1/settings/whatsapp — was 404")
+    for severity in ("HIGH", "MEDIUM", "LOW", "INFO"):
+        bucket = [f for f in findings if f.severity == severity]
+        if not bucket:
+            continue
+        print(f"\n--- {severity_icon[severity]} {severity} ---")
+        for f in bucket:
+            print(f"\n[{f.title}]")
+            if f.location:
+                print(f"  Location: {f.location}")
+            print(f"  {f.detail}")
+            if f.next_step:
+                print(f"  → Next step: {f.next_step}")
 
-check("Compliance settings (GET)",
-    requests.get, "/api/v1/super-admin/settings/compliance", headers=H,
-    expected_was="/api/v1/compliance/report — was 404")
+    print("\n" + "=" * 78)
+    print("REMINDER: this script only analyzes your code statically. Since your")
+    print("dashboard data comes from an EXTERNAL backend, the actual 500 is being")
+    print("generated over there. The fastest real diagnosis is almost always:")
+    print("  1. Apply the 'log err.response?.data' fix above (if flagged) and")
+    print("     reproduce the error to see the backend's real error message.")
+    print("  2. Check that external backend's own server logs for the matching")
+    print("     timestamp/request -- that's where the actual stack trace is.")
+    print("=" * 78)
 
-check("Role permissions",
-    requests.get, "/api/v1/super-admin/settings/permissions", headers=H,
-    expected_was="was hardcoded static array")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CHECK NEW FacilityResponse FIELDS
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n─" * 72)
-print("\n  NEW FIELDS NOW IN FacilityResponse")
-print("─" * 72)
-
-fac = requests.get(f"{BASE_URL}/api/v1/facilities/{fid}", headers=H, timeout=10).json()
-new_fields = ["type", "max_seats", "active_seats", "seat_utilization_percent"]
-for field in new_fields:
-    val = fac.get(field, "NOT_IN_RESPONSE")
-    if val == "NOT_IN_RESPONSE":
-        print(f"  ❌  {field:<30} not returned")
-    elif val is None:
-        print(f"  🟡  {field:<30} null")
-    else:
-        print(f"  ✅  {field:<30} = {val}")
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PRINT RESULTS
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n" + "=" * 72)
-print("  FULL RESULTS")
-print("=" * 72)
-
-pass_c = empty_c = fail_c = miss_c = 0
-for (status, label, detail, old_path) in results:
-    if status == PASS:  pass_c  += 1
-    if status == EMPTY: empty_c += 1
-    if status == FAIL:  fail_c  += 1
-    if status == MISS:  miss_c  += 1
-    old = f"  (was: {old_path})" if old_path else ""
-    print(f"  {status}  {label}")
-    print(f"       {detail}{old}\n")
-
-print("=" * 72)
-print(f"  ✅ Working       {pass_c:>3}")
-print(f"  🟡 Empty data    {empty_c:>3}  (endpoint OK, no data in DB yet)")
-print(f"  🔴 Error         {fail_c:>3}")
-print(f"  ❌ Still missing {miss_c:>3}")
-print("=" * 72)
-
-print("""
-WHAT TO DO NOW:
-  Your frontend service files need to be updated to call /api/v1/super-admin/*
-  instead of the old paths. Every ✅ above means the endpoint is ready to use.
-  
-  Priority order for your agent:
-  1. Update all service file base paths to /api/v1/super-admin/*
-  2. Wire the new breakdowns endpoint to restore all 6 analytics sections
-  3. Wire revenue endpoints to restore Revenue page
-  4. Wire audit-logs/export to fix the export button
-  5. Wire users/{id}/status for both suspend AND reactivate
-""")
+if __name__ == "__main__":
+    main()

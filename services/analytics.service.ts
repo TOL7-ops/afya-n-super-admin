@@ -1,11 +1,20 @@
 /**
- * Analytics service — /api/v1/super-admin/dashboard/* and /analytics/*
- * All 26 endpoints are live and tested on the super-admin API.
+ * Analytics service
+ *
+ * BREAKING CHANGE (June 2026):
+ *   Dashboard is now ONE endpoint: GET /api/v1/super-admin/dashboard
+ *   The 5 sub-endpoints (summary, screenings-trend, bp-distribution,
+ *   pending-approvals, top-institutions) no longer exist.
+ *   Use getDashboard() with the ?include= param instead.
+ *
+ *   Old sub-endpoint functions are kept as @deprecated aliases so
+ *   existing callers continue to compile while they migrate.
  */
 import api from '@/lib/api';
 import { triggerDownload } from '@/utils/download';
 import { unwrapArray } from '@/utils/unwrapArray';
 import type {
+  DashboardResponse,
   DashboardSummaryResponse,
   ScreeningsTrendResponse,
   BpDistributionResponse,
@@ -16,42 +25,18 @@ import type {
   InstitutionPerformanceItem,
 } from '@/types/api';
 
-// ─── Dashboard endpoints ──────────────────────────────────────────────────────
+// ─── Dashboard — unified endpoint ─────────────────────────────────────────────
 
-/** GET /api/v1/super-admin/dashboard/summary */
-export async function getDashboardSummary(): Promise<DashboardSummaryResponse> {
-  const res = await api.get<DashboardSummaryResponse>(
-    '/api/v1/super-admin/dashboard/summary',
-  );
+/**
+ * GET /api/v1/super-admin/dashboard
+ * Returns all dashboard widgets in one response.
+ * Pass ?include= to limit which widgets are returned, e.g.
+ *   getDashboard('summary,pending_approvals')
+ */
+export async function getDashboard(include?: string): Promise<DashboardResponse> {
+  const params = include ? { include } : {};
+  const res = await api.get<DashboardResponse>('/api/v1/super-admin/dashboard', { params });
   return res.data;
-}
-
-/** GET /api/v1/super-admin/dashboard/screenings-trend */
-export async function getScreeningsTrend(): Promise<ScreeningsTrendResponse> {
-  const res = await api.get<ScreeningsTrendResponse>(
-    '/api/v1/super-admin/dashboard/screenings-trend',
-  );
-  return res.data;
-}
-
-/** GET /api/v1/super-admin/dashboard/bp-distribution */
-export async function getBpDistribution(): Promise<BpDistributionResponse> {
-  const res = await api.get<BpDistributionResponse>(
-    '/api/v1/super-admin/dashboard/bp-distribution',
-  );
-  return res.data;
-}
-
-/** GET /api/v1/super-admin/dashboard/pending-approvals */
-export async function getPendingApprovals(): Promise<PendingApprovalItem[]> {
-  const res = await api.get<unknown>('/api/v1/super-admin/dashboard/pending-approvals');
-  return unwrapArray<PendingApprovalItem>(res.data, 'PendingApprovals');
-}
-
-/** GET /api/v1/super-admin/dashboard/top-institutions */
-export async function getTopInstitutions(): Promise<TopInstitutionItem[]> {
-  const res = await api.get<unknown>('/api/v1/super-admin/dashboard/top-institutions');
-  return unwrapArray<TopInstitutionItem>(res.data, 'TopInstitutions');
 }
 
 /** GET /api/v1/super-admin/dashboard/export-report — CSV download */
@@ -60,6 +45,43 @@ export async function exportDashboardReport(): Promise<void> {
     responseType: 'blob',
   });
   triggerDownload(res.data as Blob, 'afya-dashboard-report.csv');
+}
+
+// ─── Deprecated dashboard sub-endpoint wrappers ───────────────────────────────
+// These call the new unified endpoint and pluck the relevant widget.
+// They exist only for backward compatibility — migrate callers to getDashboard().
+
+/** @deprecated Use getDashboard() — sub-endpoints removed in June 2026 */
+export async function getDashboardSummary(): Promise<DashboardSummaryResponse> {
+  const data = await getDashboard('summary');
+  const s = data.summary;
+  return s ?? { active_institutions: 0, institutions_increment: 0, total_screened: 0, on_active_treatment: 0 };
+}
+
+/** @deprecated Use getDashboard() */
+export async function getScreeningsTrend(): Promise<ScreeningsTrendResponse> {
+  const data = await getDashboard('screenings_trend');
+  const t = data.screenings_trend;
+  return t ?? { months: [], screenings: [] };
+}
+
+/** @deprecated Use getDashboard() */
+export async function getBpDistribution(): Promise<BpDistributionResponse> {
+  const data = await getDashboard('bp_distribution');
+  const b = data.bp_distribution;
+  return b ?? { normal_pct: 0, elevated_pct: 0, stage_1_2_pct: 0, crisis_pct: 0 };
+}
+
+/** @deprecated Use getDashboard() */
+export async function getPendingApprovals(): Promise<PendingApprovalItem[]> {
+  const data = await getDashboard('pending_approvals');
+  return data.pending_approvals ?? [];
+}
+
+/** @deprecated Use getDashboard() */
+export async function getTopInstitutions(): Promise<TopInstitutionItem[]> {
+  const data = await getDashboard('top_institutions');
+  return data.top_institutions ?? [];
 }
 
 // ─── Analytics page endpoints ─────────────────────────────────────────────────
@@ -74,7 +96,7 @@ export async function getAnalyticsSummary(): Promise<AnalyticsSummaryResponse> {
 
 /**
  * GET /api/v1/super-admin/analytics/breakdowns
- * Returns ALL chart data in one call: region, age, gender, risk trend, detection trend.
+ * Returns ALL chart data in one call.
  */
 export async function getAnalyticsBreakdowns(): Promise<AnalyticsBreakdownsResponse> {
   const res = await api.get<AnalyticsBreakdownsResponse>(
@@ -96,8 +118,6 @@ export async function exportAnalytics(): Promise<void> {
   });
   triggerDownload(res.data as Blob, 'afya-analytics.csv');
 }
-
-// ─── Legacy aliases (kept for any remaining callers) ─────────────────────────
 
 /** @deprecated Use exportAnalytics() */
 export async function exportAnalyticsCsv(): Promise<void> {
