@@ -78,6 +78,9 @@ export default function AdminShell() {
     totalFacilities:   facilities.filter((f) => f._entity_type === 'facility' || !f._entity_type).length,
     totalInstitutions: facilities.filter((f) => f._entity_type === 'institution').length,
     activeLicenses:    dashboardData?.activeInstitutions ?? 0,
+    // Use the dashboard API summary — it counts ALL screened patients across the
+    // entire platform, not just the total_screened field stored on each facility
+    // record (which can be 0 for organisations that screen via events/field workers).
     totalScreened:     dashboardData?.totalScreened ?? 0,
     onTreatment:       dashboardData?.onActiveTreatment ?? 0,
     pendingApproval:   0,

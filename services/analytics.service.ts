@@ -35,7 +35,10 @@ import type {
  */
 export async function getDashboard(include?: string): Promise<DashboardResponse> {
   const params = include ? { include } : {};
-  const res = await api.get<DashboardResponse>('/api/v1/super-admin/dashboard', { params });
+  const res = await api.get<DashboardResponse>('/api/v1/super-admin/dashboard', {
+    params,
+    timeout: 90000,
+  });
   return res.data;
 }
 
@@ -107,7 +110,9 @@ export async function getAnalyticsBreakdowns(): Promise<AnalyticsBreakdownsRespo
 
 /** GET /api/v1/super-admin/analytics/institutions-performance */
 export async function getInstitutionsPerformance(): Promise<InstitutionPerformanceItem[]> {
-  const res = await api.get<unknown>('/api/v1/super-admin/analytics/institutions-performance');
+  const res = await api.get<unknown>('/api/v1/super-admin/analytics/institutions-performance', {
+    timeout: 90000,
+  });
   return unwrapArray<InstitutionPerformanceItem>(res.data, 'InstitutionsPerformance');
 }
 

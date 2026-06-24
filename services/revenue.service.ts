@@ -25,7 +25,9 @@ import type {
  * Returns KPIs + monthly_trend + revenue_by_type in one response.
  */
 export async function getRevenueAnalytics(): Promise<RevenueAnalyticsResponse> {
-  const res = await api.get<RevenueAnalyticsResponse>('/api/v1/analytics/revenue');
+  const res = await api.get<RevenueAnalyticsResponse>('/api/v1/analytics/revenue', {
+    timeout: 90000,
+  });
   return res.data;
 }
 

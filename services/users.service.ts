@@ -78,14 +78,35 @@ import type { AgentActivityLogResponse } from '@/types/api';
 
 /**
  * GET /api/v1/super-admin/audit-logs
- * agent_name is now resolved server-side — no client-side lookup needed.
+ * Returns all activity log entries. Sorted by timestamp desc on the backend.
  */
 export async function listActivityLogs(
-  _skip = 0,
-  _limit = 100,
+  skip = 0,
+  limit = 200,
 ): Promise<AgentActivityLogResponse[]> {
-  const res = await api.get<unknown>('/api/v1/super-admin/audit-logs');
-  return unwrapArray<AgentActivityLogResponse>(res.data, 'AuditLogs');
+  const res = await api.get<unknown>('/api/v1/super-admin/audit-logs', {
+    params: { skip, limit, format: undefined },
+    timeout: 90000, // audit logs can be slow — override to 90s
+  });
+
+  // Log raw response shape in dev to diagnose unwrapping issues
+  if (process.env.NODE_ENV !== 'production') {
+    const raw = res.data;
+    if (Array.isArray(raw)) {
+      console.log('[AuditLogs] Plain array, count:', raw.length, '| first:', JSON.stringify(raw[0]).slice(0, 150));
+    } else if (raw && typeof raw === 'object') {
+      console.log('[AuditLogs] Wrapped object, keys:', Object.keys(raw as object));
+    } else {
+      console.warn('[AuditLogs] Unexpected shape:', typeof raw, raw);
+    }
+  }
+
+  const entries = unwrapArray<AgentActivityLogResponse>(res.data, 'AuditLogs');
+
+  // Sort by timestamp descending so newest entries appear first
+  return entries.sort((a, b) =>
+    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
 }
 
 /** GET /api/v1/super-admin/audit-logs?format=csv — CSV blob download */

@@ -25,10 +25,14 @@ export function useAuditLog(): UseAuditLogReturn {
     setLoading(true);
     setError(null);
     try {
-      const data = await listActivityLogs();
+      const data = await listActivityLogs(0, 200);
+      console.log('[AuditLog] entries received:', data.length);
       setEntries(data);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load audit log');
+      const msg = err instanceof Error ? err.message : 'Failed to load audit log';
+      const status = (err as { response?: { status?: number } }).response?.status;
+      console.error('[AuditLog] fetch failed:', msg, 'HTTP:', status);
+      setError(msg);
     } finally {
       setLoading(false);
     }

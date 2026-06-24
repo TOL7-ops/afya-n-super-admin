@@ -16,7 +16,7 @@ const ARRAY_KEYS = [
   'users',
   'licenses',
   'items', 'data', 'results', 'list', 'records', 'payload',
-  'logs', 'entries', 'audit_logs',
+  'logs', 'entries', 'audit_logs', 'activity_logs', 'activities', 'log',
   'performance', 'institutions_performance',
   'pending_approvals', 'top_institutions',
   'transactions',
