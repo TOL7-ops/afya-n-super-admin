@@ -7,6 +7,7 @@ import api from '@/lib/api';
 import type { ToastType } from '@/types';
 import type { FacilityResponse } from '@/types/api';
 import { deriveLicenseStatus, statusToVariant } from '@/utils/licenseStatus';
+import { sortByNewest } from '@/utils/sort';
 
 interface OrganisationsViewProps {
   facilities: FacilityResponse[];
@@ -107,7 +108,7 @@ export default function OrganisationsView({
     tab === 'institutions' ? institutionList :
     facilities;
 
-  const filtered = sourceList.filter((f) => {
+  const filtered = sortByNewest(sourceList.filter((f) => {
     const q = search.toLowerCase();
     const matchQ =
       !q ||
@@ -117,7 +118,7 @@ export default function OrganisationsView({
     const status = deriveLicenseStatus(f);
     const matchS = !statusFilter || status === statusFilter;
     return matchQ && matchS;
-  });
+  }));
 
   if (loading) {
     return (

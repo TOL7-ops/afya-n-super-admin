@@ -15,6 +15,7 @@ import type { LicenseSummaryResponse, LicenseItem } from '@/types/api';
 import { extractAmountFromPlan, cleanPlanLabel } from '@/utils/planAmount';
 import { deriveLicenseStatus, statusToVariant } from '@/utils/licenseStatus';
 import { useInstitutionsStore } from '@/stores/institutionsStore';
+import { sortByNewest } from '@/utils/sort';
 
 interface LicensesViewProps {
   onToast: (msg: string, type?: ToastType) => void;
@@ -71,14 +72,14 @@ export default function LicensesView({
   // This effect mirrors that change into licenses so both pages stay in sync.
   const storeInstitutions = useInstitutionsStore((s) => s.institutions);
 
-  const licensesWithSyncedStatus = licenses.map((lic) => {
+  const licensesWithSyncedStatus = sortByNewest(licenses.map((lic) => {
     const storeInst = storeInstitutions.find(
       (inst) => inst.id === lic.institution_id ||
         inst.name.trim().toLowerCase() === lic.institution_name?.trim().toLowerCase(),
     );
     if (!storeInst) return lic;
     return { ...lic, is_active: storeInst.is_active };
-  });
+  }));
 
   // ── Action handlers — Remind and Email only ─────────────────────────────
   const handleRemind = async (lic: LicenseItem) => {

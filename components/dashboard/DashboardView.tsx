@@ -12,6 +12,7 @@ import type { FacilityResponse, TopInstitutionItem } from '@/types/api';
 import { useCountUp } from '@/hooks/useCountUp';
 import { deriveLicenseStatus, statusToVariant } from '@/utils/licenseStatus';
 import { useInstitutionsStore } from '@/stores/institutionsStore';
+import { sortByNewest } from '@/utils/sort';
 
 interface DashboardViewProps {
   onViewAllInstitutions: () => void;
@@ -281,7 +282,7 @@ export default function DashboardView({
                   </td>
                 </tr>
               ) : (
-                topInstitutions.map((inst) => (
+                sortByNewest(topInstitutions).map((inst) => (
                   <tr key={inst.id ?? inst.name} style={{ cursor: 'pointer' }} onClick={() => onViewAllInstitutions()}>
                     <td style={{ fontWeight: 500 }}>{inst.name}</td>
                     <td>

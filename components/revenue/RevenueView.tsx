@@ -14,6 +14,7 @@ import type {
   RevenueTransactionItem,
 } from '@/types/api';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import { sortByNewest } from '@/utils/sort';
 
 interface RevenueViewProps {
   onToast: (msg: string, type?: ToastType) => void;
@@ -331,7 +332,7 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
                   </td>
                 </tr>
               ) : (
-                transactions.map((tx) => {
+                sortByNewest(transactions).map((tx) => {
                   const instName = tx.institution_name ?? '—';
                   const amount   = tx.amount ?? 0;
                   const paymentDate = tx.paid_at ?? tx.payment_date ?? null;
