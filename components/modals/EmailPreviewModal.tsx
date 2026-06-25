@@ -219,7 +219,7 @@ export default function EmailPreviewModal({
               </div>
               <p className="er-text" style={{ fontSize: '.78rem', color: '#888', textAlign: 'center', marginTop: '-8px' }}>
                 This link expires in <strong>72 hours</strong>. If it expires, contact{' '}
-                <a href="mailto:support@afya.health" style={{ color: 'var(--red)' }}>support@afya.health</a>.
+                <a href="mailto:support@afya.health" style={{ color: 'var(--color-primary)' }}>support@afya.health</a>.
               </p>
 
               <div className="er-divider" />
@@ -285,7 +285,7 @@ export default function EmailPreviewModal({
               <div className="er-footer-text">
                 You received this because an Afya Super Admin created an account for your organisation.<br />
                 If this was a mistake, contact{' '}
-                <a href="mailto:support@afya.health" style={{ color: 'var(--red)' }}>support@afya.health</a>.<br /><br />
+                <a href="mailto:support@afya.health" style={{ color: 'var(--color-primary)' }}>support@afya.health</a>.<br /><br />
                 Node Eight · Ho, Volta Region, Ghana ·{' '}
                 <a href="#" style={{ color: '#999' }}>Unsubscribe</a>
               </div>

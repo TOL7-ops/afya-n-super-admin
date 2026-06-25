@@ -196,7 +196,7 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
                       const maxS = Math.max(...regionalData.map(x => x.screenings), 1);
                       const pct  = Math.round((r.screenings / maxS) * 100);
                       return (
-                        <div style={{ background: 'var(--gray-xlt)', borderRadius: '2px', height: '6px', overflow: 'hidden' }}>
+                        <div style={{ background: 'var(--color-primary-light)', borderRadius: '2px', height: '6px', overflow: 'hidden' }}>
                           <div style={{
                             height: '100%', background: 'var(--blue)',
                             width: animated ? `${pct}%` : '0%',
@@ -279,7 +279,7 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
                         {g.count.toLocaleString()} patients
                       </div>
                       {/* Bar */}
-                      <div style={{ background: 'var(--gray-xlt)', borderRadius: '2px', height: '6px', overflow: 'hidden', marginTop: '8px' }}>
+                      <div style={{ background: 'var(--color-primary-light)', borderRadius: '2px', height: '6px', overflow: 'hidden', marginTop: '8px' }}>
                         <div style={{
                           height: '100%', background: color,
                           width: animated ? `${pct}%` : '0%',
@@ -314,7 +314,7 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
                       <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.65rem', color: 'var(--gray)', width: '28px', flexShrink: 0 }}>
                         {entry.month}
                       </div>
-                      <div style={{ flex: 1, background: 'var(--gray-xlt)', borderRadius: '2px', height: '9px', overflow: 'hidden' }}>
+                      <div style={{ flex: 1, background: 'var(--color-primary-light)', borderRadius: '2px', height: '9px', overflow: 'hidden' }}>
                         <div style={{
                           height: '100%', background: barColor, borderRadius: '2px',
                           width: animated ? `${widthPct}%` : '0%',

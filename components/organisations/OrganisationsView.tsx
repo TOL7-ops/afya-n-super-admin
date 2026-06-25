@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import Badge, { institutionTypeVariant } from '@/components/shared/Badge';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import api from '@/lib/api';
 import type { ToastType } from '@/types';
 import type { FacilityResponse } from '@/types/api';
 import { deriveLicenseStatus, statusToVariant } from '@/utils/licenseStatus';
@@ -12,14 +13,19 @@ interface OrganisationsViewProps {
   loading: boolean;
   onAddFacility: () => void;
   onAddInstitution: () => void;
-  onEdit: (entity: FacilityResponse) => void;
-  onSuspend: (id: string, active: boolean, name: string) => void;
-  onExtendTrial: (id: string, name: string) => void;
   onToast: (msg: string, type?: ToastType) => void;
+  /** Called after a suspend/reactivate so the parent can refetch */
+  onRefresh: () => void;
 }
 
 type Tab = 'facilities' | 'institutions' | 'all';
 type StatusFilter = '' | 'Active' | 'Trial' | 'Suspended' | 'Pending' | 'Expiring';
+
+interface ConfirmSuspend {
+  id: string;
+  name: string;
+  entityType: 'facility' | 'institution';
+}
 
 function fmtExpiry(f: FacilityResponse, status: string): string {
   const iso = f.license_expiry ?? f.license_expires_at;
@@ -29,20 +35,26 @@ function fmtExpiry(f: FacilityResponse, status: string): string {
   });
 }
 
+function entityBase(entityType: 'facility' | 'institution'): string {
+  return entityType === 'facility'
+    ? '/api/v1/super-admin/facilities'
+    : '/api/v1/super-admin/institutions';
+}
+
 export default function OrganisationsView({
   facilities,
   loading,
   onAddFacility,
   onAddInstitution,
-  onEdit,
-  onSuspend,
-  onExtendTrial,
-  onToast: _onToast,
+  onToast,
+  onRefresh,
 }: OrganisationsViewProps) {
-  const [tab, setTab]                   = useState<Tab>('facilities');
-  const [search, setSearch]             = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [tab, setTab]                       = useState<Tab>('facilities');
+  const [search, setSearch]                 = useState('');
+  const [statusFilter, setStatusFilter]     = useState<StatusFilter>('');
+  const [dropdownOpen, setDropdownOpen]     = useState(false);
+  const [confirmSuspend, setConfirmSuspend] = useState<ConfirmSuspend | null>(null);
+  const [suspending, setSuspending]         = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -56,9 +68,39 @@ export default function OrganisationsView({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // ── Reactivate — direct, no confirmation ────────────────────────────────
+  const handleReactivate = useCallback(async (f: FacilityResponse) => {
+    const entityType = f._entity_type === 'institution' ? 'institution' : 'facility';
+    const base = entityBase(entityType);
+    try {
+      await api.patch(`${base}/${f.id}/status`, { is_active: true });
+      onToast(`${f.name} has been reactivated`, 'success');
+      onRefresh();
+    } catch {
+      onToast('Failed to reactivate organisation — try again', 'warn');
+    }
+  }, [onToast, onRefresh]);
+
+  // ── Confirm suspend → call API ───────────────────────────────────────────
+  const handleConfirmSuspend = useCallback(async () => {
+    if (!confirmSuspend) return;
+    setSuspending(true);
+    const base = entityBase(confirmSuspend.entityType);
+    try {
+      await api.patch(`${base}/${confirmSuspend.id}/status`, { is_active: false });
+      onToast(`${confirmSuspend.name} has been suspended`, 'warn');
+      setConfirmSuspend(null);
+      onRefresh();
+    } catch {
+      onToast('Failed to suspend organisation — try again', 'warn');
+    } finally {
+      setSuspending(false);
+    }
+  }, [confirmSuspend, onToast, onRefresh]);
+
   // Split combined list by entity type
-  const facilityList     = facilities.filter((f) => f._entity_type === 'facility' || !f._entity_type);
-  const institutionList  = facilities.filter((f) => f._entity_type === 'institution');
+  const facilityList    = facilities.filter((f) => f._entity_type === 'facility' || !f._entity_type);
+  const institutionList = facilities.filter((f) => f._entity_type === 'institution');
 
   const sourceList =
     tab === 'facilities'   ? facilityList :
@@ -72,8 +114,8 @@ export default function OrganisationsView({
       f.name.toLowerCase().includes(q) ||
       (f.region ?? '').toLowerCase().includes(q) ||
       (f.license_plan ?? '').toLowerCase().includes(q);
-    const status  = deriveLicenseStatus(f);
-    const matchS  = !statusFilter || status === statusFilter;
+    const status = deriveLicenseStatus(f);
+    const matchS = !statusFilter || status === statusFilter;
     return matchQ && matchS;
   });
 
@@ -91,48 +133,31 @@ export default function OrganisationsView({
     );
   }
 
-  // Action buttons shared by all tabs
+  // ── Actions: Suspend (with confirmation) or Reactivate only ─────────────
   const renderActions = (f: FacilityResponse) => {
-    const status = deriveLicenseStatus(f);
+    const status     = deriveLicenseStatus(f);
+    const entityType = f._entity_type === 'institution' ? 'institution' : 'facility';
+
+    if (status === 'Suspended') {
+      return (
+        <button
+          className="btn-icon"
+          style={{ color: 'var(--green)', borderColor: 'var(--green-border)' }}
+          onClick={() => handleReactivate(f)}
+        >
+          Reactivate
+        </button>
+      );
+    }
+
+    // Active, Expiring, Trial, Pending — show Suspend button → opens confirmation
     return (
-      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-        {(status === 'Active' || status === 'Expiring') && (
-          <>
-            <button className="btn-icon" onClick={() => onEdit(f)}>Edit</button>
-            <button className="btn-icon" onClick={() => onSuspend(f.id, false, f.name)}>Suspend</button>
-          </>
-        )}
-        {status === 'Pending' && (
-          <button
-            className="btn-icon"
-            style={{ color: 'var(--green)', borderColor: 'var(--green-border)' }}
-            onClick={() => onSuspend(f.id, true, f.name)}
-          >
-            ✓ Approve
-          </button>
-        )}
-        {status === 'Trial' && (
-          <>
-            <button
-              className="btn-icon"
-              style={{ color: 'var(--green)', borderColor: 'var(--green-border)' }}
-              onClick={() => onSuspend(f.id, true, f.name)}
-            >
-              ✓ Approve
-            </button>
-            <button className="btn-icon" onClick={() => onExtendTrial(f.id, f.name)}>Extend</button>
-          </>
-        )}
-        {status === 'Suspended' && (
-          <button
-            className="btn-icon"
-            style={{ color: 'var(--green)', borderColor: 'var(--green-border)' }}
-            onClick={() => onSuspend(f.id, true, f.name)}
-          >
-            Reactivate
-          </button>
-        )}
-      </div>
+      <button
+        className="btn-icon"
+        onClick={() => setConfirmSuspend({ id: f.id, name: f.name, entityType })}
+      >
+        Suspend
+      </button>
     );
   };
 
@@ -157,7 +182,7 @@ export default function OrganisationsView({
           {dropdownOpen && (
             <div style={{
               position: 'absolute', right: 0, top: 'calc(100% + 6px)',
-              background: 'var(--white)', border: '1px solid var(--gray-lt)',
+              background: 'var(--color-primary-light)', border: '1px solid var(--blue-border)',
               borderRadius: '4px', boxShadow: '0 4px 16px rgba(0,0,0,.1)',
               minWidth: '220px', zIndex: 100,
             }}>
@@ -206,8 +231,8 @@ export default function OrganisationsView({
               padding: '10px 20px',
               border: 'none', background: 'none', cursor: 'pointer',
               fontSize: '.82rem', fontWeight: tab === t.id ? 600 : 400,
-              color: tab === t.id ? 'var(--red)' : 'var(--gray)',
-              borderBottom: tab === t.id ? '2px solid var(--red)' : '2px solid transparent',
+              color: tab === t.id ? 'var(--color-primary)' : 'var(--gray)',
+              borderBottom: tab === t.id ? '2px solid var(--color-primary)' : '2px solid transparent',
               marginBottom: '-2px',
               fontFamily: "'Outfit', sans-serif",
             }}
@@ -369,8 +394,8 @@ export default function OrganisationsView({
                     No organisations match your filters
                   </td></tr>
                 ) : filtered.map((f) => {
-                  const status  = deriveLicenseStatus(f);
-                  const variant = statusToVariant(status);
+                  const status     = deriveLicenseStatus(f);
+                  const variant    = statusToVariant(status);
                   const isFacility = f._entity_type === 'facility' || !f._entity_type;
                   return (
                     <tr key={f.id}>
@@ -380,9 +405,9 @@ export default function OrganisationsView({
                           fontSize: '.72rem',
                           fontFamily: "'JetBrains Mono', monospace",
                           padding: '2px 7px', borderRadius: '3px',
-                          background: isFacility ? 'rgba(59,130,246,.1)' : 'rgba(34,197,94,.1)',
+                          background: isFacility ? 'rgba(33,121,255,.1)' : 'rgba(34,197,94,.1)',
                           color: isFacility ? 'var(--blue)' : 'var(--green)',
-                          border: `1px solid ${isFacility ? 'rgba(59,130,246,.25)' : 'rgba(34,197,94,.25)'}`,
+                          border: `1px solid ${isFacility ? 'rgba(33,121,255,.25)' : 'rgba(34,197,94,.25)'}`,
                         }}>
                           {isFacility ? '🏥 Facility' : '🏛 Institution'}
                         </span>
@@ -398,6 +423,54 @@ export default function OrganisationsView({
           )}
         </div>
       </div>
+
+      {/* ── Suspend confirmation modal ── */}
+      {confirmSuspend && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,.45)',
+          }}
+          onClick={() => { if (!suspending) setConfirmSuspend(null); }}
+        >
+          <div
+            style={{
+              background: 'var(--color-primary-light)',
+              borderRadius: '8px',
+              padding: '28px',
+              maxWidth: '400px', width: 'calc(100% - 32px)',
+              boxShadow: '0 8px 32px rgba(0,0,0,.18)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--ink)', marginBottom: '10px' }}>
+              Suspend Organisation?
+            </div>
+            <p style={{ fontSize: '.85rem', color: 'var(--gray)', lineHeight: 1.6, marginBottom: '24px' }}>
+              Are you sure you want to suspend{' '}
+              <strong style={{ color: 'var(--ink)' }}>{confirmSuspend.name}</strong>?
+              Their admin and all associated users will lose access immediately.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setConfirmSuspend(null)}
+                disabled={suspending}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-red"
+                onClick={handleConfirmSuspend}
+                disabled={suspending}
+              >
+                {suspending ? 'Suspending…' : 'Yes, Suspend'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

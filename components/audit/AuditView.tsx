@@ -249,7 +249,7 @@ export default function AuditView({ onToast }: AuditViewProps) {
                     {/* Category icon */}
                     <div style={{
                       width: '28px', height: '28px', borderRadius: '6px',
-                      background: 'var(--gray-xlt)', display: 'flex',
+                      background: 'var(--color-primary-light)', display: 'flex',
                       alignItems: 'center', justifyContent: 'center',
                       fontSize: '.85rem', flexShrink: 0, marginTop: '1px',
                     }}>

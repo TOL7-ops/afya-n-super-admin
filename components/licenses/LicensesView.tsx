@@ -185,14 +185,14 @@ export default function LicensesView({
                 <th>Expiry</th>
                 <th>Amount (GHS)</th>
                 <th>Status</th>
-                <th>Actions</th>
+                {/* <th>Actions</th> — commented out, not needed for now */}
               </tr>
             </thead>
             <tbody>
               {licenses.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={7}
                     style={{
                       textAlign: 'center', padding: '24px',
                       fontFamily: "'JetBrains Mono',monospace",
@@ -233,21 +233,19 @@ export default function LicensesView({
                       <td>
                         <Badge variant={variant}>{status}</Badge>
                       </td>
+                      {/* Actions column — commented out for now
                       <td>
                         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                          {/* View is available for all active/expiring/trial licenses */}
                           {(variant === 'active' || variant === 'expiring' || variant === 'trial') && (
                             <button className="btn-icon" onClick={() => setViewingLicense(lic)}>
                               View
                             </button>
                           )}
-                          {/* Email — send renewal email to active licenses */}
                           {variant === 'active' && (
                             <button className="btn-icon" onClick={() => handleSendRenewalEmail(lic)}>
                               Email
                             </button>
                           )}
-                          {/* Remind — for expiring licenses */}
                           {variant === 'expiring' && (
                             <button
                               className="btn-icon"
@@ -268,6 +266,7 @@ export default function LicensesView({
                           )}
                         </div>
                       </td>
+                      */}
                     </tr>
                   );
                 })

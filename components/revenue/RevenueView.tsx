@@ -236,7 +236,7 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
                           style={{
                             width: '100%',
                             borderRadius: '3px 3px 0 0',
-                            background: isLast ? 'var(--green)' : amount > 0 ? 'rgba(26,122,74,.4)' : 'var(--gray-xlt)',
+                            background: isLast ? 'var(--green)' : amount > 0 ? 'rgba(33,121,255,.4)' : 'var(--color-primary-light)',
                             height: animated ? `${heightPct}%` : '0%',
                             minHeight: amount > 0 ? '4px' : '2px',
                             transition: `height 1s ease ${200 + i * 100}ms`,
@@ -280,7 +280,7 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
                       <div style={{ fontSize: '.74rem', color: 'var(--ink-mid)', width: '80px', textAlign: 'right', flexShrink: 0 }}>
                         {type}
                       </div>
-                      <div style={{ flex: 1, background: 'var(--gray-xlt)', borderRadius: '2px', height: '9px', overflow: 'hidden' }}>
+                      <div style={{ flex: 1, background: 'var(--color-primary-light)', borderRadius: '2px', height: '9px', overflow: 'hidden' }}>
                         <div style={{
                           height: '100%', background: color, borderRadius: '2px',
                           width: animated ? `${pct}%` : '0%',

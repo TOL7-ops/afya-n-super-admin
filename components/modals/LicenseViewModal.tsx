@@ -44,7 +44,7 @@ export default function LicenseViewModal({
         <div className="modal-body">
           <div
             style={{
-              background: 'var(--gray-xlt)',
+              background: 'var(--color-primary-light)',
               borderRadius: '3px',
               padding: '16px',
               fontFamily: "'JetBrains Mono', monospace",

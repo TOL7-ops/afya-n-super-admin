@@ -210,7 +210,7 @@ export default function SettingsView({ onToast }: SettingsViewProps) {
                   className="inp"
                   value={compliance?.compliance_standard ?? 'Ghana Data Protection Act'}
                   readOnly
-                  style={{ background: 'var(--gray-xlt)' }}
+                  style={{ background: 'var(--color-primary-light)' }}
                 />
               </div>
               <div className="field">

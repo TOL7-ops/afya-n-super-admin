@@ -33,7 +33,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
           alignItems: 'center',
           justifyContent: 'center',
           height: '100vh',
-          background: 'var(--off)',
+          background: 'var(--color-primary-light)',
           flexDirection: 'column',
           gap: '12px',
         }}
@@ -43,7 +43,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
             width: '28px',
             height: '28px',
             border: '2px solid var(--gray-xlt)',
-            borderTopColor: 'var(--red)',
+            borderTopColor: 'var(--color-primary)',
             borderRadius: '50%',
             animation: 'spin 0.65s linear infinite',
           }}

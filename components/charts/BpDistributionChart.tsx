@@ -50,7 +50,7 @@ export default function BpDistributionChart({ data }: Props) {
           <div
             style={{
               flex: 1,
-              background: 'var(--gray-xlt)',
+              background: 'var(--color-primary-light)',
               borderRadius: '2px',
               height: '9px',
               overflow: 'hidden',

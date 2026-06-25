@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import KpiCard from './KpiCard';
 import ScreeningTrendChart, { type ScreeningTrendItem } from '@/components/charts/ScreeningTrendChart';
 import BpDistributionChart, { type BpDistributionItem } from '@/components/charts/BpDistributionChart';
@@ -11,6 +11,7 @@ import type { ToastType } from '@/types';
 import type { FacilityResponse, TopInstitutionItem } from '@/types/api';
 import { useCountUp } from '@/hooks/useCountUp';
 import { deriveLicenseStatus, statusToVariant } from '@/utils/licenseStatus';
+import { useInstitutionsStore } from '@/stores/institutionsStore';
 
 interface DashboardViewProps {
   onViewAllInstitutions: () => void;
@@ -83,17 +84,27 @@ export default function DashboardView({
     ? `All time · ${totalScreened.toLocaleString()} patients`
     : 'All time, all patients';
 
-  // Build recent onboardings: combine facilities + institutions, sort by created_at desc, take top 5
-  const recentOnboardings = [...organisations]
-    .filter((o) => !!o.created_at)
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 5)
-    .map((o) => ({
-      id:         o.id,
-      name:       o.name,
-      kind:       o._entity_type === 'institution' ? 'Institution' : 'Facility',
-      created_at: o.created_at,
-    }));
+  // Build recent onboardings from the store directly (reliable even before prop arrives)
+  // Sort newest first, show top 5 regardless of whether created_at is set
+  const storeOrgs = useInstitutionsStore((s) => s.institutions);
+  const sourceList = organisations.length > 0 ? organisations : storeOrgs;
+
+  const recentOnboardings = useMemo(() => {
+    return [...sourceList]
+      .sort((a, b) => {
+        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return tb - ta;
+      })
+      .slice(0, 5)
+      .map((o) => ({
+        id:         o.id,
+        name:       o.name,
+        kind:       o._entity_type === 'institution' ? 'Institution' : 'Facility',
+        region:     o.region ?? (o as Record<string,unknown>)['state_region'] as string ?? '—',
+        created_at: o.created_at ?? null,
+      }));
+  }, [sourceList]);
 
   function fmtJoined(iso: string | null | undefined): string {
     if (!iso) return '—';
@@ -207,7 +218,7 @@ export default function DashboardView({
                   {/* Icon */}
                   <div style={{
                     width: '32px', height: '32px', borderRadius: '6px', flexShrink: 0,
-                    background: org.kind === 'Facility' ? 'rgba(59,130,246,.1)' : 'rgba(34,197,94,.1)',
+                    background: org.kind === 'Facility' ? 'rgba(33,121,255,.1)' : 'rgba(34,197,94,.1)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: '1rem',
                   }}>
@@ -219,7 +230,7 @@ export default function DashboardView({
                       {org.name}
                     </div>
                     <div style={{ fontSize: '.7rem', color: 'var(--gray)', marginTop: '1px' }}>
-                      {org.kind}
+                      {org.kind}{org.region && org.region !== '—' ? ` · ${org.region}` : ''}
                     </div>
                   </div>
                   {/* Joined date */}
@@ -228,7 +239,7 @@ export default function DashboardView({
                     fontSize: '.68rem', color: 'var(--gray)',
                     flexShrink: 0, whiteSpace: 'nowrap',
                   }}>
-                    Joined {fmtJoined(org.created_at)}
+                    {org.created_at ? `Joined ${fmtJoined(org.created_at)}` : '—'}
                   </div>
                 </div>
               ))}

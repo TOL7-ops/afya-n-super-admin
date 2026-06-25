@@ -156,7 +156,7 @@ function VerifyForm() {
 
           <div className="ob-help">
             Token expired or not received?{' '}
-            <a href="mailto:support@afya.health" style={{ color: 'var(--red)' }}>
+            <a href="mailto:support@afya.health" style={{ color: 'var(--color-primary)' }}>
               Contact support
             </a>
           </div>
@@ -189,7 +189,7 @@ function OnboardingStyles() {
         font-family: 'Outfit', sans-serif;
       }
       .ob-card {
-        background: var(--white);
+        background: var(--color-primary-light);
         border: 1px solid var(--gray-lt);
         border-radius: 6px;
         width: 100%;
@@ -216,7 +216,7 @@ function OnboardingStyles() {
       .ob-logo-dot {
         width: 7px; height: 7px;
         border-radius: 50%;
-        background: var(--red);
+        background: var(--color-primary);
         animation: blink 2s infinite;
       }
       .ob-brand-sub {
@@ -254,7 +254,7 @@ function OnboardingStyles() {
         font-family: 'JetBrains Mono', monospace;
       }
       .ob-step-active .ob-step-num {
-        background: var(--red);
+        background: var(--color-primary);
         color: white;
       }
       .ob-step-done .ob-step-num {

@@ -11,7 +11,7 @@ export default function AdherenceBar({ percent, color = 'green' }: AdherenceBarP
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 0 }}>
       <span
         style={{
-          background: 'var(--gray-xlt)',
+          background: 'var(--color-primary-light)',
           borderRadius: '2px',
           height: '7px',
           width: '60px',

@@ -273,10 +273,8 @@ export default function AdminShell() {
               loading={facilitiesLoading}
               onAddFacility={addFacilityModal.open}
               onAddInstitution={addInstitutionModal.open}
-              onEdit={(facility) => setEditingFacility(facility)}
-              onSuspend={handleSuspend}
-              onExtendTrial={handleExtendTrial}
               onToast={showToast}
+              onRefresh={refetchFacilities}
             />
           </div>
 

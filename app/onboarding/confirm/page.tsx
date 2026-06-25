@@ -70,7 +70,7 @@ export default function ConfirmOrgPage() {
           <p className="ob-sub">
             Please verify that the details below match your organisation. If anything looks
             wrong, contact{' '}
-            <a href="mailto:support@afya.health" style={{ color: 'var(--red)' }}>
+            <a href="mailto:support@afya.health" style={{ color: 'var(--color-primary)' }}>
               support@afya.health
             </a>{' '}
             before continuing.
@@ -108,25 +108,25 @@ export default function ConfirmOrgPage() {
 
       <style>{`
         .ob-root { min-height:100vh; background:var(--off); display:flex; align-items:center; justify-content:center; padding:32px 16px; font-family:'Outfit',sans-serif; }
-        .ob-card { background:var(--white); border:1px solid var(--gray-lt); border-radius:6px; width:100%; max-width:460px; overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,.07); }
+        .ob-card { background:var(--color-primary-light); border:1px solid var(--blue-border); border-radius:6px; width:100%; max-width:460px; overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,.07); }
         .ob-brand { background:var(--ink); padding:20px 28px; display:flex; align-items:center; gap:14px; }
         .ob-logo { font-family:'Cormorant Garamond',serif; font-size:1.6rem; font-weight:700; color:white; display:flex; align-items:center; gap:8px; }
-        .ob-logo-dot { width:7px; height:7px; border-radius:50%; background:var(--red); animation:blink 2s infinite; }
+        .ob-logo-dot { width:7px; height:7px; border-radius:50%; background:var(--color-primary); animation:blink 2s infinite; }
         .ob-brand-sub { font-size:.72rem; color:rgba(255,255,255,.35); font-family:'JetBrains Mono',monospace; letter-spacing:.04em; }
-        .ob-steps { display:flex; border-bottom:1px solid var(--gray-lt); background:var(--gray-xlt); }
+        .ob-steps { display:flex; border-bottom:1px solid var(--blue-border); background:var(--color-primary-light); }
         .ob-step { flex:1; display:flex; flex-direction:column; align-items:center; padding:10px 4px; gap:4px; border-right:1px solid var(--gray-lt); opacity:.4; }
         .ob-step:last-child { border-right:none; }
         .ob-step.ob-step-active { opacity:1; }
         .ob-step.ob-step-done { opacity:.7; }
         .ob-step-num { width:20px; height:20px; border-radius:50%; background:var(--gray-lt); color:var(--gray); font-size:.65rem; font-weight:700; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; }
-        .ob-step-active .ob-step-num { background:var(--red); color:white; }
+        .ob-step-active .ob-step-num { background:var(--color-primary); color:white; }
         .ob-step-done .ob-step-num { background:var(--green); color:white; font-size:.6rem; }
         .ob-step-lbl { font-size:.63rem; color:var(--gray); font-family:'JetBrains Mono',monospace; letter-spacing:.03em; white-space:nowrap; }
         .ob-step-active .ob-step-lbl { color:var(--ink); font-weight:500; }
         .ob-body { padding:28px; }
         .ob-title { font-size:1.1rem; font-weight:600; color:var(--ink); margin-bottom:8px; }
         .ob-sub { font-size:.81rem; color:var(--gray); line-height:1.6; margin-bottom:20px; }
-        .ob-org-box { background:var(--gray-xlt); border:1px solid var(--gray-lt); border-radius:4px; padding:16px 18px; margin-bottom:22px; }
+        .ob-org-box { background:var(--color-primary-light); border:1px solid var(--blue-border); border-radius:4px; padding:16px 18px; margin-bottom:22px; }
         .ob-org-name { font-size:1rem; font-weight:600; color:var(--ink); margin-bottom:10px; }
         .ob-org-row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--gray-lt); font-size:.8rem; }
         .ob-org-row:last-child { border-bottom:none; }

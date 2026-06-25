@@ -224,14 +224,14 @@ export default function CreateInstitutionModal({
           alignItems: 'center',
           gap: '8px',
           padding: '10px 20px',
-          background: 'var(--gray-xlt)',
+          background: 'var(--color-primary-light)',
           borderBottom: '1px solid var(--gray-lt)',
           fontSize: '.72rem',
           fontFamily: "'JetBrains Mono', monospace",
         }}>
           <div style={{
             width: '20px', height: '20px', borderRadius: '50%',
-            background: step === 1 ? 'var(--red)' : 'var(--green)',
+            background: step === 1 ? 'var(--color-primary)' : 'var(--green)',
             color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '.65rem', fontWeight: 700, flexShrink: 0,
           }}>
@@ -243,7 +243,7 @@ export default function CreateInstitutionModal({
           <div style={{ flex: 1, height: '2px', background: step === 2 ? 'var(--green)' : 'var(--gray-lt)' }} />
           <div style={{
             width: '20px', height: '20px', borderRadius: '50%',
-            background: step === 2 ? 'var(--red)' : 'var(--gray-lt)',
+            background: step === 2 ? 'var(--color-primary)' : 'var(--gray-lt)',
             color: step === 2 ? 'white' : 'var(--gray)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '.65rem', fontWeight: 700, flexShrink: 0,

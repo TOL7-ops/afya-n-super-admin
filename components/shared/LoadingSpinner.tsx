@@ -19,7 +19,7 @@ export default function LoadingSpinner({ message = 'Loading…' }: LoadingSpinne
           width: '24px',
           height: '24px',
           border: '2px solid var(--gray-xlt)',
-          borderTopColor: 'var(--red)',
+          borderTopColor: 'var(--color-primary)',
           borderRadius: '50%',
           animation: 'spin 0.7s linear infinite',
         }}

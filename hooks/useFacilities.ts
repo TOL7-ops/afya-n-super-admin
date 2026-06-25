@@ -38,14 +38,14 @@ export function useFacilities(): UseFacilitiesReturn {
   const { institutions, loading, error, fetch, lastFetched } = useInstitutionsStore();
   const actions = useInstitutionActions();
 
-  // Fetch on first mount if never fetched or stale (> 5 min) — only when authenticated
+  // Fetch on first mount if never fetched, stale (> 5 min), or the list is empty
   useEffect(() => {
-    if (!getAccessToken()) return; // no token yet — AuthGuard will redirect to /login
     const STALE_MS = 5 * 60 * 1000;
-    if (!lastFetched || Date.now() - lastFetched > STALE_MS) {
+    if (!getAccessToken()) return;
+    if (!lastFetched || Date.now() - lastFetched > STALE_MS || institutions.length === 0) {
       fetch();
     }
-  }, [fetch, lastFetched]);
+  }, [fetch, lastFetched, institutions.length]);
 
   return {
     facilities: institutions,

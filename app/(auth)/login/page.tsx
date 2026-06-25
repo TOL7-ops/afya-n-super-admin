@@ -237,7 +237,7 @@ export default function LoginPage() {
           display: flex;
           height: 100vh;
           overflow: hidden;
-          background: var(--off);
+          background: var(--color-primary-light);
           font-family: 'Outfit', sans-serif;
         }
 
@@ -245,7 +245,7 @@ export default function LoginPage() {
         .login-brand {
           width: 400px;
           flex-shrink: 0;
-          background: var(--ink);
+          background: linear-gradient(135deg, #2179FF 0%, #0066FF 100%);
           display: flex;
           flex-direction: column;
           justify-content: center;
@@ -261,7 +261,7 @@ export default function LoginPage() {
           width: 300px;
           height: 300px;
           border-radius: 50%;
-          background: rgba(196,30,58,.07);
+          background: rgba(255,255,255,.08);
           pointer-events: none;
         }
         .login-brand::after {
@@ -272,7 +272,7 @@ export default function LoginPage() {
           width: 220px;
           height: 220px;
           border-radius: 50%;
-          background: rgba(196,30,58,.05);
+          background: rgba(0,102,255,.2);
           pointer-events: none;
         }
         .login-brand-inner { position: relative; z-index: 1; }
@@ -289,7 +289,7 @@ export default function LoginPage() {
         }
         .login-brand-tagline {
           font-size: .9rem;
-          color: rgba(255,255,255,.45);
+          color: rgba(255,255,255,.85);
           line-height: 1.6;
           margin-bottom: 32px;
         }
@@ -313,14 +313,14 @@ export default function LoginPage() {
         }
         .login-stat-lbl {
           font-size: .72rem;
-          color: rgba(255,255,255,.3);
+          color: rgba(255,255,255,.75);
           font-family: 'JetBrains Mono', monospace;
           letter-spacing: .04em;
         }
         .login-brand-footer {
           margin-top: 36px;
           font-size: .68rem;
-          color: rgba(255,255,255,.2);
+          color: rgba(255,255,255,.55);
           font-family: 'JetBrains Mono', monospace;
           letter-spacing: .06em;
           text-transform: uppercase;
