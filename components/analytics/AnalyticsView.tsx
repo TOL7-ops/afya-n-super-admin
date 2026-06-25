@@ -88,8 +88,15 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
   const ageRaw   = breakdowns?.age ?? [];
   const ageTotal = ageRaw.reduce((s, r) => s + r.count, 0);
 
-  // gender[].gender + .count
-  const genderRaw   = breakdowns?.gender ?? [];
+  // gender[].gender + .count — deduplicate by gender label (API can return duplicates)
+  const genderRaw = (() => {
+    const raw = breakdowns?.gender ?? [];
+    const merged = new Map<string, number>();
+    for (const r of raw) {
+      merged.set(r.gender, (merged.get(r.gender) ?? 0) + r.count);
+    }
+    return Array.from(merged.entries()).map(([gender, count]) => ({ gender, count }));
+  })();
   const genderTotal = genderRaw.reduce((s, r) => s + r.count, 0);
 
   // risk_trends[].month + .normal + .elevated + .high + .crisis

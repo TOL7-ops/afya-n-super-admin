@@ -101,7 +101,7 @@ export default function DashboardView({
         id:         o.id,
         name:       o.name,
         kind:       o._entity_type === 'institution' ? 'Institution' : 'Facility',
-        region:     o.region ?? (o as Record<string,unknown>)['state_region'] as string ?? '—',
+        region:     o.region ?? (o as unknown as Record<string,unknown>)['state_region'] as string ?? '—',
         created_at: o.created_at ?? null,
       }));
   }, [sourceList]);
