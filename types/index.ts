@@ -2,6 +2,7 @@
 export type ViewId =
   | 'dashboard'
   | 'institutions'
+  | 'demo-requests'
   | 'licenses'
   | 'analytics'
   | 'revenue'

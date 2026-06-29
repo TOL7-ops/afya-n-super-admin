@@ -37,7 +37,7 @@ export default function RevenueBarChart({ data }: Props) {
       >
         {chartData.map((item, i) => (
           <div
-            key={item.month}
+            key={`bar-${item.month}-${i}`}
             style={{
               flex: 1,
               display: 'flex',
@@ -65,9 +65,9 @@ export default function RevenueBarChart({ data }: Props) {
         ))}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-        {chartData.map((item) => (
+        {chartData.map((item, i) => (
           <span
-            key={item.month}
+            key={`label-${item.month}-${i}`}
             style={{
               fontFamily: "'JetBrains Mono', monospace",
               fontSize: '.6rem',

@@ -57,7 +57,7 @@ export default function ScreeningTrendChart({ data }: Props) {
           const color = COLORS[Math.min(i, COLORS.length - 1)];
           return (
             <div
-              key={item.month}
+              key={`bar-${item.month}-${i}`}
               style={{
                 flex: 1,
                 borderRadius: '3px 3px 0 0',
@@ -88,9 +88,9 @@ export default function ScreeningTrendChart({ data }: Props) {
         })}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-        {data.map((item) => (
+        {data.map((item, i) => (
           <span
-            key={item.month}
+            key={`label-${item.month}-${i}`}
             style={{
               fontFamily: "'JetBrains Mono', monospace",
               fontSize: '.6rem',

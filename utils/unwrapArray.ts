@@ -21,6 +21,8 @@ const ARRAY_KEYS = [
   'pending_approvals', 'top_institutions',
   'transactions',
   'permissions',
+  'demo_requests', 'demo-requests', 'requests',
+  'subscriptions',
 ];
 
 export function unwrapArray<T>(raw: unknown, label = 'API'): T[] {

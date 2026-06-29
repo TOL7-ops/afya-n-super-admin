@@ -6,15 +6,15 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import LicenseViewModal from '@/components/modals/LicenseViewModal';
 import type { ToastType } from '@/types';
 import {
-  getLicensesSummary,
-  listLicenses,
+  getSubscriptions,
   sendLicenseReminder,
   sendRenewalEmail,
 } from '@/services/licenses.service';
-import type { LicenseSummaryResponse, LicenseItem } from '@/types/api';
-import { extractAmountFromPlan, cleanPlanLabel } from '@/utils/planAmount';
+import type { LicenseItem } from '@/types/api';
+import { cleanPlanLabel } from '@/utils/planAmount';
 import { deriveLicenseStatus, statusToVariant } from '@/utils/licenseStatus';
 import { useInstitutionsStore } from '@/stores/institutionsStore';
+import UnlimitedPill from '@/components/shared/UnlimitedPill';
 
 interface LicensesViewProps {
   onToast: (msg: string, type?: ToastType) => void;
@@ -32,32 +32,23 @@ export default function LicensesView({
   onToast,
   refreshKey = 0,
 }: LicensesViewProps) {
-  const [summary, setSummary]         = useState<LicenseSummaryResponse | null>(null);
-  const [licenses, setLicenses]       = useState<LicenseItem[]>([]);
-  const [loading, setLoading]         = useState(true);
+  const [totalActive, setTotalActive]   = useState<number | null>(null);
+  const [totalMrr, setTotalMrr]         = useState<number | null>(null);
+  const [licenses, setLicenses]         = useState<LicenseItem[]>([]);
+  const [loading, setLoading]           = useState(true);
   const [viewingLicense, setViewingLicense] = useState<LicenseItem | null>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [licRes, sumRes] = await Promise.allSettled([
-        listLicenses(),
-        getLicensesSummary(),
-      ]);
-
-      if (licRes.status === 'fulfilled') {
-        setLicenses(licRes.value);
-        console.log('[Licenses] count:', licRes.value.length, 'sample[0]:', licRes.value[0]);
-      } else {
-        console.warn('[Licenses] list failed:', licRes.reason);
-        onToast('Failed to load licenses — try again', 'warn');
-      }
-
-      if (sumRes.status === 'fulfilled') {
-        setSummary(sumRes.value);
-      } else {
-        console.warn('[Licenses] summary failed (non-critical):', sumRes.reason);
-      }
+      const { total_active, total_mrr, subscriptions } = await getSubscriptions();
+      setTotalActive(total_active);
+      setTotalMrr(total_mrr);
+      setLicenses(subscriptions);
+      console.log('[Licenses] count:', subscriptions.length, 'sample[0]:', subscriptions[0]);
+    } catch (err) {
+      console.warn('[Licenses] load failed:', err);
+      onToast('Failed to load licenses — try again', 'warn');
     } finally {
       setLoading(false);
     }
@@ -82,18 +73,20 @@ export default function LicensesView({
 
   // ── Action handlers — Remind and Email only ─────────────────────────────
   const handleRemind = async (lic: LicenseItem) => {
+    const displayName = (lic as Record<string,unknown>).name as string ?? lic.institution_name ?? '—';
     try {
       await sendLicenseReminder(lic.id);
-      onToast(`Renewal reminder sent to ${lic.institution_name}`, 'success');
+      onToast(`Renewal reminder sent to ${displayName}`, 'success');
     } catch {
-      onToast(`Failed to send reminder for ${lic.institution_name}`, 'warn');
+      onToast(`Failed to send reminder for ${displayName}`, 'warn');
     }
   };
 
   const handleSendRenewalEmail = async (lic: LicenseItem) => {
+    const displayName = (lic as Record<string,unknown>).name as string ?? lic.institution_name ?? '—';
     try {
       await sendRenewalEmail(lic.id);
-      onToast(`Renewal email sent to ${lic.institution_name}`, 'success');
+      onToast(`Renewal email sent to ${displayName}`, 'success');
     } catch {
       onToast('Failed to send renewal email — try again', 'warn');
     }
@@ -113,26 +106,51 @@ export default function LicensesView({
     );
   }
 
-  // ── FIX 2: KPI cards — computed from synced licenses (store is_active applied) ──
-  const activeLicenses   = licensesWithSyncedStatus.filter(l => deriveLicenseStatus(l) === 'Active').length;
+  // KPIs — from the real API fields
+  // total_active comes from the wrapper; expiring computed from list
+  const activeLicenses   = totalActive ?? licensesWithSyncedStatus.filter(l => deriveLicenseStatus(l) === 'Active').length;
   const expiringLicenses = licensesWithSyncedStatus.filter(l => deriveLicenseStatus(l) === 'Expiring').length;
 
-  // ── FIX 5: Seat utilisation — from summary only ───────────────────────────
-  const seatUtilPct  = summary?.seat_utilization_pct ?? null;
-  const seatsActive  = summary?.seats_active ?? null;
-  const seatsTotal   = (summary as Record<string, unknown> | null)?.seats_total as number | undefined ?? null;
+  // Seat totals — sum across all subscriptions
+  // seats_limit is null for unlimited plans — sum only non-null values
+  const seatsLimitTotal = licenses.reduce((s, l) => {
+    const v = (l as Record<string,unknown>).seats_limit;
+    return s + (typeof v === 'number' ? v : 0);
+  }, 0);
+  // Count rows that actually have a seats_limit set (non-null)
+  const hasAnyLimit = licenses.some(l => {
+    const v = (l as Record<string,unknown>).seats_limit;
+    return typeof v === 'number';
+  });
+  const seatsUsed = licenses.reduce((s, l) => {
+    const v = (l as Record<string,unknown>).seats_used;
+    return s + (typeof v === 'number' ? v : 0);
+  }, 0);
 
-  const seatDisplay = seatUtilPct != null
-    ? `${Math.round(seatUtilPct)}%`
+  // Utilisation % only meaningful when there's a limit
+  const seatUtilPct = hasAnyLimit && seatsLimitTotal > 0
+    ? Math.round((seatsUsed / seatsLimitTotal) * 100)
+    : null;
+
+  // Display: always show seats used; percentage only when limit exists
+  const seatDisplay = seatsUsed > 0 || hasAnyLimit
+    ? hasAnyLimit
+      ? `${seatUtilPct}%`
+      : `${seatsUsed}`
     : '—';
-  const seatSub = seatsActive != null
-    ? seatsTotal != null
-      ? `${seatsActive} / ${seatsTotal} seats (${Math.round(seatUtilPct ?? 0)}%)`
-      : `${seatsActive} seats active`
-    : 'No seat data available';
+  const seatSub = seatsUsed > 0
+    ? hasAnyLimit
+      ? `${seatsUsed} / ${seatsLimitTotal} seats used`
+      : `${seatsUsed} seats in use · no limit set`
+    : hasAnyLimit
+      ? `0 / ${seatsLimitTotal} seats used`
+      : 'No seats in use yet';
 
   const uniqueInstitutions = new Set(
-    licensesWithSyncedStatus.map(l => l.institution_name?.trim().toLowerCase()),
+    licensesWithSyncedStatus.map(l => {
+      const n = (l as Record<string,unknown>).name ?? l.institution_name;
+      return typeof n === 'string' ? n.trim().toLowerCase() : '';
+    }),
   ).size;
 
   return (
@@ -163,7 +181,7 @@ export default function LicensesView({
         <div className="kpi">
           <div className="kpi-ico">🪑</div>
           <div className="kpi-lbl">Seat Utilisation</div>
-          <div className={`kpi-val${seatUtilPct != null ? ' green' : ''}`}>{seatDisplay}</div>
+          <div className={`kpi-val${seatsUsed > 0 ? ' green' : ''}`}>{seatDisplay}</div>
           <div className="kpi-sub">{seatSub}</div>
         </div>
       </div>
@@ -178,21 +196,21 @@ export default function LicensesView({
           <table className="tbl">
             <thead>
               <tr>
-                <th>Institution</th>
+                <th>Organisation Name</th>
+                <th>Type</th>
                 <th>Plan</th>
-                <th>Seats</th>
+                <th>Seats Used</th>
+                <th>Seats Limit</th>
                 <th>Start Date</th>
                 <th>Expiry</th>
-                <th>Amount (GHS)</th>
                 <th>Status</th>
-                {/* <th>Actions</th> — commented out, not needed for now */}
               </tr>
             </thead>
             <tbody>
               {licenses.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     style={{
                       textAlign: 'center', padding: '24px',
                       fontFamily: "'JetBrains Mono',monospace",
@@ -204,16 +222,25 @@ export default function LicensesView({
                 </tr>
               ) : (
                 licensesWithSyncedStatus.map((lic) => {
-                  const status    = deriveLicenseStatus(lic);
-                  const variant   = statusToVariant(status);
+                  const raw         = lic as Record<string, unknown>;
+                  // Real API fields: name, type, plan, expires_at, is_active, seats_limit, seats_used
+                  const displayName = (raw.name as string | null) ?? lic.institution_name ?? '—';
+                  const displayType = (raw.type as string | null) ?? '—';
+                  const seatsLimit  = raw.seats_limit as number | null ?? lic.seats ?? null;
+                  const seatsUsedN  = raw.seats_used  as number | null ?? null;
+
+                  const status     = deriveLicenseStatus(lic);
+                  const variant    = statusToVariant(status);
                   const isExpiring = status === 'Expiring';
 
                   return (
                     <tr key={lic.id}>
-                      <td style={{ fontWeight: 500 }}>{lic.institution_name}</td>
+                      <td style={{ fontWeight: 500 }}>{displayName}</td>
+                      <td style={{ fontSize: '.8rem', color: 'var(--ink-mid)' }}>{displayType}</td>
                       <td style={{ fontSize: '.8rem' }}>{cleanPlanLabel(lic.plan)}</td>
-                      <td className="mono">
-                        {lic.seats != null ? `${lic.seats} seats` : '—'}
+                      <td className="mono">{seatsUsedN ?? 0}</td>
+                      <td>
+                        <UnlimitedPill seatsLimit={seatsLimit} />
                       </td>
                       <td className="id-cell">{fmtDate(lic.start_date)}</td>
                       <td
@@ -222,51 +249,9 @@ export default function LicensesView({
                       >
                         {fmtDate(lic.expires_at)}
                       </td>
-                      <td
-                        className="mono"
-                        style={{ color: (lic.amount ?? 0) > 0 ? 'var(--green)' : 'var(--gray)' }}
-                      >
-                        {(lic.amount ?? 0) > 0
-                          ? `GHS ${(lic.amount as number).toLocaleString()}`
-                          : '—'}
-                      </td>
                       <td>
                         <Badge variant={variant}>{status}</Badge>
                       </td>
-                      {/* Actions column — commented out for now
-                      <td>
-                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                          {(variant === 'active' || variant === 'expiring' || variant === 'trial') && (
-                            <button className="btn-icon" onClick={() => setViewingLicense(lic)}>
-                              View
-                            </button>
-                          )}
-                          {variant === 'active' && (
-                            <button className="btn-icon" onClick={() => handleSendRenewalEmail(lic)}>
-                              Email
-                            </button>
-                          )}
-                          {variant === 'expiring' && (
-                            <button
-                              className="btn-icon"
-                              style={{ color: 'var(--amber)', borderColor: 'var(--amber-border)' }}
-                              onClick={() => handleRemind(lic)}
-                            >
-                              Remind
-                            </button>
-                          )}
-                          {(variant === 'suspended' || variant === 'pending') && (
-                            <span style={{
-                              fontFamily: "'JetBrains Mono',monospace",
-                              fontSize: '.65rem',
-                              color: 'var(--gray)',
-                            }}>
-                              Inactive
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      */}
                     </tr>
                   );
                 })
@@ -281,10 +266,10 @@ export default function LicensesView({
           isOpen={true}
           onClose={() => setViewingLicense(null)}
           data={{
-            title: `License — ${viewingLicense.institution_name}`,
-            institution: viewingLicense.institution_name,
+            title: `License — ${(viewingLicense as Record<string,unknown>).name ?? viewingLicense.institution_name ?? '—'}`,
+            institution: (viewingLicense as Record<string,unknown>).name as string ?? viewingLicense.institution_name ?? '—',
             plan: cleanPlanLabel(viewingLicense.plan),
-            seats: viewingLicense.seats ?? 0,
+            seats: (viewingLicense as Record<string,unknown>).seats_limit as number ?? viewingLicense.seats ?? 0,
             startDate: fmtDate(viewingLicense.start_date),
             expiry: fmtDate(viewingLicense.expires_at),
             amount: viewingLicense.amount ?? 0,

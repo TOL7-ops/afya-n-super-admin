@@ -244,8 +244,8 @@ const obStyles = `
     letter-spacing: .1em;
     text-transform: uppercase;
     color: var(--color-primary);
-    background: rgba(33,121,255,.12);
-    border: 1px solid rgba(33,121,255,.22);
+    background: rgba(7,72,128,.12);
+    border: 1px solid rgba(7,72,128,.22);
     padding: 3px 9px;
     border-radius: 2px;
   }

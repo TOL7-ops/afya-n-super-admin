@@ -30,11 +30,12 @@ interface NavItem {
 }
 
 const PLATFORM_NAV: NavItem[] = [
-  { id: 'dashboard',    icon: '⊞', label: 'Dashboard' },
-  { id: 'institutions', icon: '🏛', label: 'Organisations', badge: true },
-  { id: 'licenses',     icon: '🔑', label: 'Licenses' },
-  { id: 'analytics',    icon: '📈', label: 'Platform Analytics' },
-  { id: 'revenue',      icon: '💰', label: 'Revenue' },
+  { id: 'dashboard',     icon: '⊞', label: 'Dashboard' },
+  { id: 'institutions',  icon: '🏛', label: 'Organisations', badge: true },
+  { id: 'demo-requests', icon: '📥', label: 'Demo Requests' },
+  { id: 'licenses',      icon: '🔑', label: 'Licenses' },
+  { id: 'analytics',     icon: '📈', label: 'Platform Analytics' },
+  { id: 'revenue',       icon: '💰', label: 'Revenue' },
 ];
 
 const OPS_NAV: NavItem[] = [
@@ -96,6 +97,7 @@ export default function Sidebar({
         </div>
       ))}
 
+      {/* ── Platform Stats — commented out, kept for recovery ──────────────────
       <div className="sb-div" />
       <div className="sb-sec">Platform Stats</div>
       <div className="sb-stats">
@@ -128,6 +130,7 @@ export default function Sidebar({
           <span className="sb-sv warn">{pendingCount}</span>
         </div>
       </div>
+      ── End Platform Stats ── */}
     </aside>
   );
 }

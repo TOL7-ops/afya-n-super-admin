@@ -7,6 +7,7 @@ import api from '@/lib/api';
 import type { ToastType } from '@/types';
 import type { FacilityResponse } from '@/types/api';
 import { deriveLicenseStatus, statusToVariant } from '@/utils/licenseStatus';
+import SeatsCell from '@/components/shared/SeatsCell';
 
 interface OrganisationsViewProps {
   facilities: FacilityResponse[];
@@ -73,7 +74,7 @@ export default function OrganisationsView({
     const entityType = f._entity_type === 'institution' ? 'institution' : 'facility';
     const base = entityBase(entityType);
     try {
-      await api.patch(`${base}/${f.id}/status`, { is_active: true });
+      await api.patch(`${base}/${f.id}/status`, { is_active: true }, { timeout: 15000 });
       onToast(`${f.name} has been reactivated`, 'success');
       onRefresh();
     } catch {
@@ -87,12 +88,21 @@ export default function OrganisationsView({
     setSuspending(true);
     const base = entityBase(confirmSuspend.entityType);
     try {
-      await api.patch(`${base}/${confirmSuspend.id}/status`, { is_active: false });
+      await api.patch(
+        `${base}/${confirmSuspend.id}/status`,
+        { is_active: false },
+        { timeout: 15000 },
+      );
       onToast(`${confirmSuspend.name} has been suspended`, 'warn');
       setConfirmSuspend(null);
       onRefresh();
-    } catch {
-      onToast('Failed to suspend organisation — try again', 'warn');
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } }).response?.status;
+      if (status === 408 || (err as { code?: string }).code === 'ECONNABORTED') {
+        onToast('Request timed out — check connection and try again', 'warn');
+      } else {
+        onToast('Failed to suspend organisation — try again', 'warn');
+      }
     } finally {
       setSuspending(false);
     }
@@ -312,14 +322,15 @@ export default function OrganisationsView({
                 ) : filtered.map((f) => {
                   const status  = deriveLicenseStatus(f);
                   const variant = statusToVariant(status);
-                  const seats   = f.seats ?? f.max_seats ?? null;
+                  const seatsUsed  = f.field_workers_count ?? 0;
+                  const seatsLimit = f.seats ?? f.max_seats ?? null;
                   return (
                     <tr key={f.id}>
                       <td style={{ fontWeight: 500 }}>{f.name}</td>
                       <td><Badge variant={institutionTypeVariant(f.type ?? '')}>{f.type ?? '—'}</Badge></td>
                       <td>{f.region ?? '—'}</td>
                       <td style={{ fontSize: '.76rem', color: 'var(--ink-mid)' }}>{f.email ?? '—'}</td>
-                      <td className="mono">{seats != null ? seats : '—'}</td>
+                      <td className="mono"><SeatsCell seatsUsed={seatsUsed} seatsLimit={seatsLimit} /></td>
                       <td className="mono">{(f.total_screened ?? 0).toLocaleString()}</td>
                       <td className="id-cell">{fmtExpiry(f, status)}</td>
                       <td><Badge variant={variant}>{status}</Badge></td>
@@ -355,7 +366,8 @@ export default function OrganisationsView({
                 ) : filtered.map((f) => {
                   const status  = deriveLicenseStatus(f);
                   const variant = statusToVariant(status);
-                  const seats   = f.seats ?? f.max_seats ?? null;
+                  const seatsUsed  = f.field_workers_count ?? 0;
+                  const seatsLimit = f.seats ?? f.max_seats ?? null;
                   const city    = (f as unknown as Record<string, unknown>)['city'] as string | null ?? '—';
                   const region  = f.region ?? (f as unknown as Record<string, unknown>)['state_region'] as string | null ?? '—';
                   return (
@@ -364,7 +376,7 @@ export default function OrganisationsView({
                       <td style={{ fontSize: '.8rem' }}>{city}</td>
                       <td>{region}</td>
                       <td style={{ fontSize: '.76rem', color: 'var(--ink-mid)' }}>{f.email ?? '—'}</td>
-                      <td className="mono">{seats != null ? seats : '—'}</td>
+                      <td className="mono"><SeatsCell seatsUsed={seatsUsed} seatsLimit={seatsLimit} /></td>
                       <td className="mono">{(f.total_screened ?? 0).toLocaleString()}</td>
                       <td className="id-cell">{fmtExpiry(f, status)}</td>
                       <td><Badge variant={variant}>{status}</Badge></td>
@@ -405,9 +417,9 @@ export default function OrganisationsView({
                           fontSize: '.72rem',
                           fontFamily: "'JetBrains Mono', monospace",
                           padding: '2px 7px', borderRadius: '3px',
-                          background: isFacility ? 'rgba(33,121,255,.1)' : 'rgba(34,197,94,.1)',
+                          background: isFacility ? 'rgba(7,72,128,.1)' : 'rgba(34,197,94,.1)',
                           color: isFacility ? 'var(--blue)' : 'var(--green)',
-                          border: `1px solid ${isFacility ? 'rgba(33,121,255,.25)' : 'rgba(34,197,94,.25)'}`,
+                          border: `1px solid ${isFacility ? 'rgba(7,72,128,.25)' : 'rgba(34,197,94,.25)'}`,
                         }}>
                           {isFacility ? '🏥 Facility' : '🏛 Institution'}
                         </span>

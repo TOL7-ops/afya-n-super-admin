@@ -12,6 +12,11 @@ interface UsersViewProps {
   onToast: (msg: string, type?: ToastType) => void;
 }
 
+interface ConfirmSuspendUser {
+  id: string;
+  name: string;
+}
+
 const ROLE_CHIP: Record<string, string> = {
   'Super Admin':  'chip-gov',
   Admin:          'chip-ngo',
@@ -45,8 +50,11 @@ function fmtLastLogin(iso: string | null | undefined): string {
 export default function UsersView({ onToast }: UsersViewProps) {
   const { users, loading, error, updateStatus } = useUsers();
   const { facilities } = useFacilities();
-  const [search, setSearch]         = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
+  void facilities; // kept for future use — institution name already resolved server-side
+  const [search, setSearch]                         = useState('');
+  const [roleFilter, setRoleFilter]                 = useState('');
+  const [confirmSuspend, setConfirmSuspend]         = useState<ConfirmSuspendUser | null>(null);
+  const [suspending, setSuspending]                 = useState(false);
 
   const filtered = users.filter((u: UserResponse) => {
     const q = search.toLowerCase();
@@ -59,19 +67,30 @@ export default function UsersView({ onToast }: UsersViewProps) {
     return matchQ && matchR;
   });
 
-  const handleSuspend = async (id: string, name: string) => {
+  // ── Suspend: opens confirmation modal ────────────────────────────────────
+  const handleSuspendClick = (user: UserResponse) => {
+    setConfirmSuspend({ id: user.id, name: user.full_name });
+  };
+
+  // ── Confirm suspend → call API with loading guard ────────────────────────
+  const handleConfirmSuspend = async () => {
+    if (!confirmSuspend) return;
+    setSuspending(true);
     try {
-      await updateStatus(id, false);
-      onToast(`${name} suspended`, 'warn');
+      await updateStatus(confirmSuspend.id, false);
+      onToast(`${confirmSuspend.name} suspended`, 'warn');
+      setConfirmSuspend(null);
     } catch {
       onToast('Failed to suspend user — try again', 'warn');
+    } finally {
+      setSuspending(false);
     }
   };
 
   const handleReactivate = async (id: string, name: string) => {
     try {
       await updateStatus(id, true);
-      onToast(`✓ ${name} reactivated`, 'success');
+      onToast(`${name} reactivated`, 'success');
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } }).response?.status;
       if (status === 404 || status === 405) {
@@ -210,7 +229,7 @@ export default function UsersView({ onToast }: UsersViewProps) {
                         {isActive ? (
                           <button
                             className="btn-icon"
-                            onClick={() => handleSuspend(user.id, user.full_name)}
+                            onClick={() => handleSuspendClick(user)}
                           >
                             Suspend
                           </button>
@@ -232,6 +251,54 @@ export default function UsersView({ onToast }: UsersViewProps) {
           </table>
         </div>
       </div>
+
+      {/* ── Suspend confirmation modal ── */}
+      {confirmSuspend && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,.45)',
+          }}
+          onClick={() => { if (!suspending) setConfirmSuspend(null); }}
+        >
+          <div
+            style={{
+              background: 'var(--color-primary-light)',
+              borderRadius: '8px',
+              padding: '28px',
+              maxWidth: '400px', width: 'calc(100% - 32px)',
+              boxShadow: '0 8px 32px rgba(0,0,0,.18)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--ink)', marginBottom: '10px' }}>
+              Suspend User?
+            </div>
+            <p style={{ fontSize: '.85rem', color: 'var(--gray)', lineHeight: 1.6, marginBottom: '24px' }}>
+              Are you sure you want to suspend{' '}
+              <strong style={{ color: 'var(--ink)' }}>{confirmSuspend.name}</strong>?
+              They will lose access to the platform immediately.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setConfirmSuspend(null)}
+                disabled={suspending}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-red"
+                onClick={handleConfirmSuspend}
+                disabled={suspending}
+              >
+                {suspending ? 'Suspending…' : 'Yes, Suspend'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

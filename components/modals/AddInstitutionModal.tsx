@@ -60,6 +60,7 @@ export default function AddInstitutionModal({
       onToast(`${form.name} registered — onboarding email sent`, 'success');
       reset();
       onComplete();
+      onClose();
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail;
       setError(typeof detail === 'string' ? detail : 'Failed to register institution — try again');

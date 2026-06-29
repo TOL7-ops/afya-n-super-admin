@@ -236,7 +236,7 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
                           style={{
                             width: '100%',
                             borderRadius: '3px 3px 0 0',
-                            background: isLast ? 'var(--green)' : amount > 0 ? 'rgba(33,121,255,.4)' : 'var(--color-primary-light)',
+                            background: isLast ? 'var(--green)' : amount > 0 ? 'rgba(7,72,128,.4)' : 'var(--color-primary-light)',
                             height: animated ? `${heightPct}%` : '0%',
                             minHeight: amount > 0 ? '4px' : '2px',
                             transition: `height 1s ease ${200 + i * 100}ms`,

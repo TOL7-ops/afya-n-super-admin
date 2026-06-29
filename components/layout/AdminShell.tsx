@@ -6,6 +6,7 @@ import Topbar from './Topbar';
 import Toast from '@/components/shared/Toast';
 import DashboardView from '@/components/dashboard/DashboardView';
 import InstitutionsView from '@/components/organisations/OrganisationsView';
+import DemoRequestsView from '@/components/demo/DemoRequestsView';
 import LicensesView from '@/components/licenses/LicensesView';
 import AnalyticsView from '@/components/analytics/AnalyticsView';
 import RevenueView from '@/components/revenue/RevenueView';
@@ -251,10 +252,10 @@ export default function AdminShell() {
           <div className={`view${activeView === 'dashboard' ? ' active' : ''}`}>
             <DashboardView
               onViewAllInstitutions={() => handleNavigate('institutions')}
+              onViewDemoRequests={() => handleNavigate('demo-requests')}
               onToast={showToast}
               onExportReport={handleDashboardExport}
               topInstitutions={topInstitutions}
-              organisations={facilities}
               activeInstitutions={dashboardData?.activeInstitutions ?? 0}
               totalInstitutions={facilities.length}
               totalScreened={dashboardData?.totalScreened ?? 0}
@@ -276,6 +277,11 @@ export default function AdminShell() {
               onToast={showToast}
               onRefresh={refetchFacilities}
             />
+          </div>
+
+          {/* Demo Requests — self-contained, uses own hook */}
+          <div className={`view${activeView === 'demo-requests' ? ' active' : ''}`}>
+            <DemoRequestsView onToast={showToast} />
           </div>
 
           {/* Licenses — self-contained, uses own API calls */}

@@ -41,7 +41,7 @@ export default function RiskTrendChart({ data }: Props) {
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '120px' }}>
         {data.map((item, i) => (
-          <div key={item.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, height: '100%' }}>
+          <div key={`bar-${item.month}-${i}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, height: '100%' }}>
             <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column-reverse', gap: '1px', borderRadius: '3px 3px 0 0', overflow: 'hidden' }}>
               {[item.normal, item.elevated, item.stage12, item.crisis].map((pct, j) => (
                 <div key={j} style={{

@@ -57,7 +57,6 @@ export default function LoginPage() {
       const status = axErr.response?.status;
 
       if (typeof detail === 'string') {
-        // e.g. "Incorrect email or password"
         setError(detail);
       } else if (Array.isArray(detail)) {
         setError(detail.map((d) => d.msg).join(', '));
@@ -65,6 +64,10 @@ export default function LoginPage() {
         setError('Invalid email or password.');
       } else if (status === 422) {
         setError('Invalid request — check your email and password.');
+      } else if (status === 500) {
+        setError('The server is currently unavailable. Please wait a moment and try again.');
+      } else if (status === 503 || status === 502 || status === 504) {
+        setError('Server is starting up — please wait 30 seconds and try again.');
       } else if (status === 0 || !status) {
         setError('Cannot reach the server. Check your connection.');
       } else {
@@ -245,7 +248,7 @@ export default function LoginPage() {
         .login-brand {
           width: 400px;
           flex-shrink: 0;
-          background: linear-gradient(135deg, #2179FF 0%, #0066FF 100%);
+          background: linear-gradient(135deg, #074880 0%, #053d6b 100%);
           display: flex;
           flex-direction: column;
           justify-content: center;

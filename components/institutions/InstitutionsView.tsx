@@ -190,9 +190,9 @@ export default function InstitutionsView({
                               padding: '1px 5px',
                               borderRadius: '2px',
                               alignSelf: 'flex-start',
-                              background: f._entity_type === 'facility' ? 'rgba(33,121,255,.1)' : 'rgba(34,197,94,.1)',
+                              background: f._entity_type === 'facility' ? 'rgba(7,72,128,.1)' : 'rgba(34,197,94,.1)',
                               color: f._entity_type === 'facility' ? 'var(--blue)' : 'var(--green)',
-                              border: `1px solid ${f._entity_type === 'facility' ? 'rgba(33,121,255,.25)' : 'rgba(34,197,94,.25)'}`,
+                              border: `1px solid ${f._entity_type === 'facility' ? 'rgba(7,72,128,.25)' : 'rgba(34,197,94,.25)'}`,
                             }}>
                               {f._entity_type === 'facility' ? 'Facility' : 'Institution'}
                             </span>

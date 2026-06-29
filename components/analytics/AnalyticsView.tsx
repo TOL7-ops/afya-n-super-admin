@@ -89,18 +89,31 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
   const ageTotal = ageRaw.reduce((s, r) => s + r.count, 0);
 
   // gender[].gender + .count — deduplicate by gender label (API can return duplicates)
+  // "Unknown" is remapped to "Others" for display
   const genderRaw = (() => {
     const raw = breakdowns?.gender ?? [];
     const merged = new Map<string, number>();
     for (const r of raw) {
-      merged.set(r.gender, (merged.get(r.gender) ?? 0) + r.count);
+      const label = r.gender === 'Unknown' ? 'Others' : r.gender;
+      merged.set(label, (merged.get(label) ?? 0) + r.count);
     }
     return Array.from(merged.entries()).map(([gender, count]) => ({ gender, count }));
   })();
   const genderTotal = genderRaw.reduce((s, r) => s + r.count, 0);
 
-  // risk_trends[].month + .normal + .elevated + .high + .crisis
-  const riskTrends = breakdowns?.risk_trends ?? [];
+  // risk_trends[].month + .normal_pct + .elevated_pct + .high_pct + .crisis_pct
+  // Normalise to a common shape so the render doesn't care which field name the API used
+  const riskTrends = (breakdowns?.risk_trends ?? []).map((item) => {
+    const r = item as Record<string, unknown>;
+    return {
+      month:    item.month,
+      // API returns *_pct suffixed names — fall back to bare names for resilience
+      normal:   (r.normal_pct   ?? r.normal   ?? 0) as number,
+      elevated: (r.elevated_pct ?? r.elevated ?? 0) as number,
+      high:     (r.high_pct     ?? r.high     ?? 0) as number,
+      crisis:   (r.crisis_pct   ?? r.crisis   ?? 0) as number,
+    };
+  });
 
   // detection_rate[].month + .rate
   const detectionRate2 = breakdowns?.detection_rate ?? [];
@@ -184,8 +197,8 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
               <NoData label="No regional data yet" />
             ) : (
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                {regionalData.map((r) => (
-                  <div key={r.region} style={{
+                {regionalData.map((r, i) => (
+                  <div key={`region-${r.region}-${i}`} style={{
                     flex: '1 1 140px', border: '1px solid var(--gray-xlt)',
                     borderRadius: '4px', padding: '14px 16px',
                   }}>
@@ -232,7 +245,7 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
                 {ageRaw.map((row, i) => {
                   const pct = ageTotal > 0 ? Math.round((row.count / ageTotal) * 100) : 0;
                   return (
-                    <div key={row.age_range} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div key={`age-${row.age_range}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{ width: '48px', fontSize: '.74rem', color: 'var(--ink-mid)', flexShrink: 0 }}>
                         {row.age_range}
                       </div>

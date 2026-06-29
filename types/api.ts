@@ -333,6 +333,24 @@ export interface UserResponse {
   [key: string]: unknown;
 }
 
+// ─── Demo Requests ────────────────────────────────────────────────────────────
+export type DemoRequestStatus = 'Pending' | 'Approved' | 'Rejected';
+
+/**
+ * Shape confirmed from GET /api/v1/institutions/demo-requests:
+ * { id, name, email, organization_name, organization_type, status, created_at }
+ */
+export interface DemoRequest {
+  id: string;
+  name: string;                     // requester's name
+  email: string | null;             // requester's email
+  organization_name: string;        // org name
+  organization_type: string | null; // e.g. "Hospital"
+  status: DemoRequestStatus;
+  created_at: string;
+  [key: string]: unknown;
+}
+
 // ─── Audit Log ────────────────────────────────────────────────────────────────
 export interface AuditLogEntry {
   id: string;                          // UUID

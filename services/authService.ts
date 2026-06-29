@@ -92,7 +92,10 @@ export async function login(payload: LoginPayload): Promise<UserResponse> {
   const tokenRes = await axios.post<TokenResponse>(
     `${apiBase()}/api/v1/users/login`,
     payload,
-    { headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' } },
+    {
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+      timeout: 90000, // 90s — Railway can take 60s to wake from sleep
+    },
   );
 
   const { access_token, refresh_token } = tokenRes.data;
