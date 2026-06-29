@@ -37,11 +37,9 @@ function fmtExpiry(f: FacilityResponse, status: string): string {
 }
 
 function entityBase(entityType: 'facility' | 'institution'): string {
-  // Both institution and facility status changes go through the /facilities endpoint.
-  // The backend has PATCH /super-admin/facilities/{id}/status but NOT
-  // PATCH /super-admin/institutions/{id}/status (returns 404).
-  // Institution records are stored as facilities in the backend.
-  return '/api/v1/super-admin/facilities';
+  return entityType === 'facility'
+    ? '/api/v1/super-admin/facilities'
+    : '/api/v1/super-admin/institutions';
 }
 
 export default function OrganisationsView({
