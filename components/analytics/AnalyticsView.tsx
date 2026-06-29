@@ -416,24 +416,24 @@ export default function AnalyticsView({ onToast }: AnalyticsViewProps) {
         </div>
       </div>
 
-      {/* ── Row 5: Follow-up & Adherence by Institution ── */}
+      {/* ── Row 5: Follow-up & Adherence by Organisation ── */}
       <div className="card">
         <div className="card-hdr">
-          <div className="card-title">Follow-up &amp; Adherence Rates by Institution</div>
+          <div className="card-title">Follow-up &amp; Adherence Rates by Organisation</div>
           <div className="card-sub">Evaluating programme effectiveness</div>
         </div>
         <div className="tbl-scroll">
           {performance.length === 0 ? (
             <div style={{ padding: '24px', textAlign: 'center' }}>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.72rem', color: 'var(--gray)' }}>
-                No institution performance data yet
+                No organisation performance data yet
               </span>
             </div>
           ) : (
             <table className="tbl">
               <thead>
                 <tr>
-                  <th>Institution</th>
+                  <th>Organisation</th>
                   <th>Region</th>
                   <th>Total Screened</th>
                   <th>High BP</th>

@@ -108,7 +108,7 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
         <div className="pg-hdr">
           <div>
             <div className="pg-title">Revenue</div>
-            <div className="pg-sub">Licensing income across all institutions · Afya Platform</div>
+            <div className="pg-sub">Licensing income across all organisations · Afya Platform</div>
           </div>
         </div>
         <LoadingSpinner message="Loading revenue data…" />
@@ -157,7 +157,7 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
       <div className="pg-hdr">
         <div>
           <div className="pg-title">Revenue</div>
-          <div className="pg-sub">Licensing income across all institutions · Afya Platform</div>
+          <div className="pg-sub">Licensing income across all organisations · Afya Platform</div>
         </div>
         <button className="btn btn-ghost" onClick={handleExport}>
           Export Report ↓
@@ -258,10 +258,10 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
           </div>
         </div>
 
-        {/* Revenue by Institution Type */}
+        {/* Revenue by Organisation Type */}
         <div className="card" style={{ marginBottom: 0 }}>
           <div className="card-hdr">
-            <div className="card-title">Revenue by Institution Type</div>
+            <div className="card-title">Revenue by Organisation Type</div>
           </div>
           <div className="card-body">
             {byTypeEntries.length === 0 ? (
@@ -313,7 +313,7 @@ export default function RevenueView({ onToast }: RevenueViewProps) {
           <table className="tbl">
             <thead>
               <tr>
-                <th>Institution</th>
+                <th>Organisation</th>
                 <th>Type</th>
                 <th>Plan</th>
                 <th>Amount (GHS)</th>
