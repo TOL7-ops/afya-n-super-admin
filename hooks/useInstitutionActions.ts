@@ -22,18 +22,17 @@ import type { InstitutionCreatePayload, FacilityResponse } from '@/types/api';
 
 /** Determine the base URL prefix for an entity based on its type tag. */
 function entityBase(entityType?: 'institution' | 'facility'): string {
-  return entityType === 'facility'
-    ? '/api/v1/super-admin/facilities'
-    : '/api/v1/super-admin/institutions';
+  // All status/action operations go through /facilities — the backend has no
+  // /institutions/{id}/status endpoint (returns 404). Institution records are
+  // stored as facilities in the backend DB.
+  void entityType; // kept for call-site readability but routing is unified
+  return '/api/v1/super-admin/facilities';
 }
 
 /** Update status (suspend/reactivate) routing to the correct endpoint. */
 async function patchStatus(id: string, entityType: 'institution' | 'facility' | undefined, isActive: boolean): Promise<void> {
-  if (entityType === 'facility') {
-    await api.patch(`/api/v1/super-admin/facilities/${id}/status`, { is_active: isActive });
-  } else {
-    await updateInstitutionStatus(id, isActive);
-  }
+  // Always use /facilities/{id}/status — institutions share the same backend table
+  await api.patch(`/api/v1/super-admin/facilities/${id}/status`, { is_active: isActive });
 }
 
 export function useInstitutionActions() {

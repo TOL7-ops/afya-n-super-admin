@@ -37,9 +37,11 @@ function fmtExpiry(f: FacilityResponse, status: string): string {
 }
 
 function entityBase(entityType: 'facility' | 'institution'): string {
-  return entityType === 'facility'
-    ? '/api/v1/super-admin/facilities'
-    : '/api/v1/super-admin/institutions';
+  // Both institution and facility status changes go through the /facilities endpoint.
+  // The backend has PATCH /super-admin/facilities/{id}/status but NOT
+  // PATCH /super-admin/institutions/{id}/status (returns 404).
+  // Institution records are stored as facilities in the backend.
+  return '/api/v1/super-admin/facilities';
 }
 
 export default function OrganisationsView({
@@ -77,7 +79,9 @@ export default function OrganisationsView({
       await api.patch(`${base}/${f.id}/status`, { is_active: true }, { timeout: 15000 });
       onToast(`${f.name} has been reactivated`, 'success');
       onRefresh();
-    } catch {
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } }).response?.status;
+      console.error('[Reactivate] Failed:', entityType, f.id, 'HTTP', status, err);
       onToast('Failed to reactivate organisation — try again', 'warn');
     }
   }, [onToast, onRefresh]);
@@ -87,21 +91,25 @@ export default function OrganisationsView({
     if (!confirmSuspend) return;
     setSuspending(true);
     const base = entityBase(confirmSuspend.entityType);
+    const url  = `${base}/${confirmSuspend.id}/status`;
+    console.log('[Suspend] PATCH', url, '{ is_active: false }', 'entityType:', confirmSuspend.entityType);
     try {
-      await api.patch(
-        `${base}/${confirmSuspend.id}/status`,
-        { is_active: false },
-        { timeout: 15000 },
-      );
+      await api.patch(url, { is_active: false }, { timeout: 15000 });
       onToast(`${confirmSuspend.name} has been suspended`, 'warn');
       setConfirmSuspend(null);
       onRefresh();
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } }).response?.status;
+      const data   = (err as { response?: { data?: unknown } }).response?.data;
+      console.error('[Suspend] Failed:', confirmSuspend.entityType, confirmSuspend.id, 'HTTP', status, 'body:', JSON.stringify(data), err);
       if (status === 408 || (err as { code?: string }).code === 'ECONNABORTED') {
         onToast('Request timed out — check connection and try again', 'warn');
+      } else if (status === 422) {
+        onToast(`Suspend rejected by server (422) — check console for details`, 'warn');
+      } else if (status === 404) {
+        onToast(`Suspend endpoint not found (404) — contact backend`, 'warn');
       } else {
-        onToast('Failed to suspend organisation — try again', 'warn');
+        onToast(`Failed to suspend organisation (HTTP ${status ?? 'no response'}) — try again`, 'warn');
       }
     } finally {
       setSuspending(false);

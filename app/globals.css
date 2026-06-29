@@ -549,6 +549,15 @@ input, select, textarea { font-family: inherit; outline: none; }
   .search-wrap { min-width: 100%; }
   .filter-sel { min-width: 100%; width: 100%; }
 
+  /* Prevent iOS Safari auto-zoom on input focus (requires font-size >= 16px) */
+  .inp,
+  .sel,
+  .filter-sel,
+  .search-input,
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
   .form-grid { grid-template-columns: 1fr; }
   .form-grid .span2 { grid-column: span 1; }
 
