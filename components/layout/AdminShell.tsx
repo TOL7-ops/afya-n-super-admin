@@ -36,7 +36,15 @@ import type {
 } from '@/types/api';
 
 export default function AdminShell() {
-  const [activeView, setActiveView] = useState<ViewId>('dashboard');
+  const [activeView, setActiveView] = useState<ViewId>(() => {
+    // Restore last active view from sessionStorage so refresh stays on the same page
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('afya_active_view') as ViewId | null;
+      const valid: ViewId[] = ['dashboard','institutions','demo-requests','licenses','analytics','revenue','users','audit','settings'];
+      if (saved && valid.includes(saved)) return saved;
+    }
+    return 'dashboard';
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { toast, showToast } = useToast();
 
@@ -90,6 +98,9 @@ export default function AdminShell() {
   // ─── Navigation ───────────────────────────────────────────────────────────
   const handleNavigate = useCallback((view: ViewId) => {
     setActiveView(view);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('afya_active_view', view);
+    }
     setSidebarOpen(false);
   }, []);
 

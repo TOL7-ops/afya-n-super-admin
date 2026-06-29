@@ -83,44 +83,25 @@ export default function LoginPage() {
 
   return (
     <div className="login-root">
-      {/* ── Left brand panel ── */}
-      <div className="login-brand">
-        <div className="login-brand-inner">
-          <div className="login-logo">
-            <div className="logo-dot" />
-            Afya
-          </div>
-          <div className="login-brand-tagline">
-            Hypertension Screening &amp;<br />Medication Adherence Platform
-          </div>
-          <div className="login-brand-divider" />
-          <div className="login-brand-stat">
-            <span className="login-stat-val">4,712+</span>
-            <span className="login-stat-lbl">Patients screened</span>
-          </div>
-          <div className="login-brand-stat">
-            <span className="login-stat-val">14</span>
-            <span className="login-stat-lbl">Active institutions</span>
-          </div>
-          <div className="login-brand-stat">
-            <span className="login-stat-val">3 regions</span>
-            <span className="login-stat-lbl">Covered across Ghana</span>
-          </div>
-          <div className="login-brand-footer">
-            Node Eight · Ho, Volta Region, Ghana
-          </div>
-        </div>
-      </div>
-
-      {/* ── Right form panel ── */}
+      {/* ── Centered form ── */}
       <div className="login-panel">
         <div className="login-form-wrap">
+          {/* Logo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '32px' }}>
+            <div style={{
+              fontFamily: "'Cormorant Garamond', serif",
+              fontSize: '1.8rem', fontWeight: 700,
+              color: 'var(--color-primary)',
+              display: 'flex', alignItems: 'center', gap: '8px',
+            }}>
+              <div className="logo-dot" style={{ background: 'var(--color-primary)' }} />
+              Afya
+            </div>
+          </div>
+
           {/* Header */}
           <div className="login-form-header">
-            <div className="admin-badge" style={{ marginBottom: '16px', alignSelf: 'flex-start' }}>
-              Super Admin
-            </div>
-            <div className="login-form-title">Welcome back</div>
+            <div className="login-form-title">Sign in</div>
             <div className="login-form-sub">
               Sign in to the Afya Platform Admin Console
             </div>
@@ -128,7 +109,6 @@ export default function LoginPage() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} noValidate>
-            {/* Error banner */}
             {error && (
               <div className="login-error-banner" role="alert">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -140,68 +120,36 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Email */}
             <div className="field" style={{ marginBottom: '14px' }}>
-              <label className="lbl" htmlFor="login-email">
-                Email address
-              </label>
+              <label className="lbl" htmlFor="login-email">Email address</label>
               <input
-                id="login-email"
-                className="inp"
-                type="email"
-                autoComplete="email"
+                id="login-email" className="inp" type="email" autoComplete="email"
                 placeholder="admin@institution.gh"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); setError(null); }}
-                disabled={loading}
-                required
+                value={email} onChange={(e) => { setEmail(e.target.value); setError(null); }}
+                disabled={loading} required
               />
             </div>
 
-            {/* Password */}
             <div className="field" style={{ marginBottom: '22px' }}>
-              <label className="lbl" htmlFor="login-password">
-                Password
-              </label>
+              <label className="lbl" htmlFor="login-password">Password</label>
               <div style={{ position: 'relative', display: 'block' }}>
                 <input
-                  id="login-password"
-                  className="inp"
-                  type={showPwd ? 'text' : 'password'}
-                  autoComplete="current-password"
+                  id="login-password" className="inp"
+                  type={showPwd ? 'text' : 'password'} autoComplete="current-password"
                   placeholder="Your password"
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                  disabled={loading}
-                  required
+                  value={password} onChange={(e) => { setPassword(e.target.value); setError(null); }}
+                  disabled={loading} required
                   style={{ paddingRight: '40px', width: '100%', boxSizing: 'border-box' }}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd((v) => !v)}
+                <button type="button" onClick={() => setShowPwd((v) => !v)}
                   aria-label={showPwd ? 'Hide password' : 'Show password'}
-                  style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '0',
-                    color: 'var(--gray)',
-                    display: 'flex',
-                    alignItems: 'center',
-                  }}
-                >
+                  style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--gray)', display: 'flex', alignItems: 'center' }}>
                   {showPwd ? (
-                    /* eye-off */
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
                       <line x1="1" y1="1" x2="23" y2="23" />
                     </svg>
                   ) : (
-                    /* eye */
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                       <circle cx="12" cy="12" r="3" />
@@ -211,27 +159,13 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Submit */}
-            <button
-              type="submit"
-              className="btn btn-red"
-              disabled={loading}
-              style={{ width: '100%', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
+            <button type="submit" className="btn btn-red" disabled={loading}
+              style={{ width: '100%', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }}>
               {loading ? (
-                <>
-                  <span className="login-spinner" />
-                  Signing in…
-                </>
-              ) : (
-                'Sign In to Admin Console'
-              )}
+                <><span className="login-spinner" />Signing in…</>
+              ) : 'Sign In to Admin Console'}
             </button>
           </form>
-
-          <div className="login-form-footer">
-            Afya Platform v1.0 · Node Eight
-          </div>
         </div>
       </div>
 
@@ -243,93 +177,6 @@ export default function LoginPage() {
           background: var(--color-primary-light);
           font-family: 'Outfit', sans-serif;
         }
-
-        /* ── Brand panel ── */
-        .login-brand {
-          width: 400px;
-          flex-shrink: 0;
-          background: linear-gradient(135deg, #074880 0%, #053d6b 100%);
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          padding: 48px 44px;
-          position: relative;
-          overflow: hidden;
-        }
-        .login-brand::before {
-          content: '';
-          position: absolute;
-          top: -80px;
-          right: -80px;
-          width: 300px;
-          height: 300px;
-          border-radius: 50%;
-          background: rgba(255,255,255,.08);
-          pointer-events: none;
-        }
-        .login-brand::after {
-          content: '';
-          position: absolute;
-          bottom: -60px;
-          left: -60px;
-          width: 220px;
-          height: 220px;
-          border-radius: 50%;
-          background: rgba(0,102,255,.2);
-          pointer-events: none;
-        }
-        .login-brand-inner { position: relative; z-index: 1; }
-
-        .login-logo {
-          font-family: 'Cormorant Garamond', serif;
-          font-size: 2.2rem;
-          font-weight: 700;
-          color: white;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          margin-bottom: 20px;
-        }
-        .login-brand-tagline {
-          font-size: .9rem;
-          color: rgba(255,255,255,.85);
-          line-height: 1.6;
-          margin-bottom: 32px;
-        }
-        .login-brand-divider {
-          height: 1px;
-          background: rgba(255,255,255,.08);
-          margin-bottom: 28px;
-        }
-        .login-brand-stat {
-          display: flex;
-          flex-direction: column;
-          gap: 3px;
-          margin-bottom: 18px;
-        }
-        .login-stat-val {
-          font-family: 'Cormorant Garamond', serif;
-          font-size: 1.9rem;
-          font-weight: 700;
-          color: white;
-          line-height: 1;
-        }
-        .login-stat-lbl {
-          font-size: .72rem;
-          color: rgba(255,255,255,.75);
-          font-family: 'JetBrains Mono', monospace;
-          letter-spacing: .04em;
-        }
-        .login-brand-footer {
-          margin-top: 36px;
-          font-size: .68rem;
-          color: rgba(255,255,255,.55);
-          font-family: 'JetBrains Mono', monospace;
-          letter-spacing: .06em;
-          text-transform: uppercase;
-        }
-
-        /* ── Form panel ── */
         .login-panel {
           flex: 1;
           display: flex;
@@ -340,7 +187,7 @@ export default function LoginPage() {
         }
         .login-form-wrap {
           width: 100%;
-          max-width: 420px;
+          max-width: 400px;
           display: flex;
           flex-direction: column;
         }
@@ -359,8 +206,6 @@ export default function LoginPage() {
           font-size: .82rem;
           color: var(--gray);
         }
-
-        /* Error banner */
         .login-error-banner {
           display: flex;
           align-items: flex-start;
@@ -374,8 +219,6 @@ export default function LoginPage() {
           margin-bottom: 16px;
           line-height: 1.45;
         }
-
-        /* Spinner */
         .login-spinner {
           width: 14px;
           height: 14px;
@@ -386,21 +229,6 @@ export default function LoginPage() {
           flex-shrink: 0;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-
-        .login-form-footer {
-          margin-top: 32px;
-          font-size: .68rem;
-          color: var(--gray);
-          text-align: center;
-          font-family: 'JetBrains Mono', monospace;
-          letter-spacing: .04em;
-          opacity: .6;
-        }
-
-        /* Responsive — collapse brand panel on small screens */
-        @media (max-width: 700px) {
-          .login-brand { display: none; }
-        }
       `}</style>
     </div>
   );

@@ -8,6 +8,7 @@ import type { ToastType } from '@/types';
 import type { FacilityResponse } from '@/types/api';
 import { deriveLicenseStatus, statusToVariant } from '@/utils/licenseStatus';
 import SeatsCell from '@/components/shared/SeatsCell';
+import OrgDetailsPanel from '@/components/shared/OrgDetailsPanel';
 
 interface OrganisationsViewProps {
   facilities: FacilityResponse[];
@@ -56,6 +57,7 @@ export default function OrganisationsView({
   const [dropdownOpen, setDropdownOpen]     = useState(false);
   const [confirmSuspend, setConfirmSuspend] = useState<ConfirmSuspend | null>(null);
   const [suspending, setSuspending]         = useState(false);
+  const [selectedOrg, setSelectedOrg]       = useState<FacilityResponse | null>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -159,18 +161,17 @@ export default function OrganisationsView({
         <button
           className="btn-icon"
           style={{ color: 'var(--green)', borderColor: 'var(--green-border)' }}
-          onClick={() => handleReactivate(f)}
+          onClick={(e) => { e.stopPropagation(); handleReactivate(f); }}
         >
           Reactivate
         </button>
       );
     }
 
-    // Active, Expiring, Trial, Pending — show Suspend button → opens confirmation
     return (
       <button
         className="btn-icon"
-        onClick={() => setConfirmSuspend({ id: f.id, name: f.name, entityType })}
+        onClick={(e) => { e.stopPropagation(); setConfirmSuspend({ id: f.id, name: f.name, entityType }); }}
       >
         Suspend
       </button>
@@ -331,7 +332,7 @@ export default function OrganisationsView({
                   const seatsUsed  = f.field_workers_count ?? 0;
                   const seatsLimit = f.seats ?? f.max_seats ?? null;
                   return (
-                    <tr key={f.id}>
+                    <tr key={f.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedOrg(f)}>
                       <td style={{ fontWeight: 500 }}>{f.name}</td>
                       <td><Badge variant={institutionTypeVariant(f.type ?? '')}>{f.type ?? '—'}</Badge></td>
                       <td>{f.region ?? '—'}</td>
@@ -377,7 +378,7 @@ export default function OrganisationsView({
                   const city    = (f as unknown as Record<string, unknown>)['city'] as string | null ?? '—';
                   const region  = f.region ?? (f as unknown as Record<string, unknown>)['state_region'] as string | null ?? '—';
                   return (
-                    <tr key={f.id}>
+                    <tr key={f.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedOrg(f)}>
                       <td style={{ fontWeight: 500 }}>{f.name}</td>
                       <td style={{ fontSize: '.8rem' }}>{city}</td>
                       <td>{region}</td>
@@ -416,7 +417,7 @@ export default function OrganisationsView({
                   const variant    = statusToVariant(status);
                   const isFacility = f._entity_type === 'facility' || !f._entity_type;
                   return (
-                    <tr key={f.id}>
+                    <tr key={f.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedOrg(f)}>
                       <td style={{ fontWeight: 500 }}>{f.name}</td>
                       <td>
                         <span style={{
@@ -489,6 +490,23 @@ export default function OrganisationsView({
           </div>
         </div>
       )}
+      {/* ── Organisation details slide-over ── */}
+      <OrgDetailsPanel
+        org={selectedOrg}
+        onClose={() => setSelectedOrg(null)}
+        onSuspend={(org) => {
+          setSelectedOrg(null);
+          setConfirmSuspend({
+            id: org.id,
+            name: org.name,
+            entityType: org._entity_type === 'institution' ? 'institution' : 'facility',
+          });
+        }}
+        onReactivate={(org) => {
+          setSelectedOrg(null);
+          handleReactivate(org);
+        }}
+      />
     </div>
   );
 }

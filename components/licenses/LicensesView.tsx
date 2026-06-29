@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import Badge from '@/components/shared/Badge';
+import { useEffect, useState, useCallback } from 'react';import Badge from '@/components/shared/Badge';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import LicenseViewModal from '@/components/modals/LicenseViewModal';
 import type { ToastType } from '@/types';
@@ -9,6 +8,7 @@ import {
   getSubscriptions,
   sendLicenseReminder,
   sendRenewalEmail,
+  issueLicense,
 } from '@/services/licenses.service';
 import type { LicenseItem } from '@/types/api';
 import { cleanPlanLabel } from '@/utils/planAmount';
@@ -28,6 +28,212 @@ function fmtDate(iso: string | null | undefined): string {
   });
 }
 
+// ─── Static license types (swap for API call when endpoint is available) ──────
+const LICENSE_TYPES = ['Basic', 'Professional', 'Enterprise', 'Plus', 'Trial'];
+
+// ─── Issue License Modal ───────────────────────────────────────────────────────
+interface IssueLicenseModalInlineProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onToast: (msg: string, type?: '' | 'success' | 'warn') => void;
+  onSuccess: () => void;
+}
+
+function IssueLicenseModalInline({ isOpen, onClose, onToast, onSuccess }: IssueLicenseModalInlineProps) {
+  const storeOrgs = useInstitutionsStore((s) => s.institutions);
+
+  const EMPTY_FORM = {
+    organization: '',
+    licenseType: '',
+    seats: '',
+    expirationDate: '',
+    paymentMethod: 'Bank Transfer',
+    notes: '',
+  };
+
+  const [form, setForm]   = useState({ ...EMPTY_FORM });
+  const [saving, setSaving] = useState(false);
+  const [error, setError]  = useState<string | null>(null);
+  const [orgSearch, setOrgSearch] = useState('');
+  const [orgDropOpen, setOrgDropOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setForm({ ...EMPTY_FORM });
+      setSaving(false);
+      setError(null);
+      setOrgSearch('');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  const selectedOrg = storeOrgs.find((o) => o.id === form.organization);
+
+  const filteredOrgs = storeOrgs.filter((o) =>
+    o.name.toLowerCase().includes(orgSearch.toLowerCase())
+  );
+
+  const handleSubmit = async () => {
+    if (!form.organization)   { setError('Please select an organization.'); return; }
+    if (!form.licenseType)    { setError('Please select a license type.'); return; }
+    if (!form.expirationDate) { setError('Please set an expiration date.'); return; }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      await issueLicense({
+        institution_name: selectedOrg!.name,
+        plan:             form.licenseType,
+        start_date:       new Date().toISOString(),
+        seats:            form.seats ? Number(form.seats) : 10,
+        payment_method:   form.paymentMethod,
+      });
+      onToast(`License issued to ${selectedOrg!.name}`, 'success');
+      onSuccess();
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Failed to issue license — try again');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="modal-overlay open"
+      onClick={(e) => { if ((e.target as HTMLElement).classList.contains('modal-overlay')) onClose(); }}
+    >
+      <div className="modal" style={{ maxWidth: '520px' }}>
+        <div className="modal-top">
+          <div className="modal-title">🔑 Issue License</div>
+          <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="modal-body">
+          {error && (
+            <div style={{ marginBottom: '14px', padding: '10px 12px', background: 'var(--red-pale)', border: '1px solid var(--red-mist)', borderRadius: '3px', fontSize: '.8rem', color: 'var(--red)' }}>
+              {error}
+            </div>
+          )}
+
+          <div className="form-grid">
+            {/* Organization — searchable dropdown */}
+            <div className="field span2" style={{ position: 'relative' }}>
+              <label className="lbl">Organization <span className="req">*</span></label>
+              <input
+                className="inp"
+                type="text"
+                placeholder="Search organizations…"
+                value={selectedOrg ? selectedOrg.name : orgSearch}
+                onChange={(e) => {
+                  setOrgSearch(e.target.value);
+                  setForm((f) => ({ ...f, organization: '' }));
+                  setOrgDropOpen(true);
+                  setError(null);
+                }}
+                onFocus={() => setOrgDropOpen(true)}
+                autoComplete="off"
+              />
+              {orgDropOpen && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+                  background: 'var(--color-primary-light)', border: '1px solid var(--blue-border)',
+                  borderRadius: '4px', boxShadow: '0 4px 16px rgba(0,0,0,.1)',
+                  maxHeight: '200px', overflowY: 'auto',
+                }}>
+                  {filteredOrgs.length === 0 ? (
+                    <div style={{ padding: '12px 14px', fontSize: '.8rem', color: 'var(--gray)' }}>
+                      No organizations found
+                    </div>
+                  ) : filteredOrgs.map((o) => (
+                    <button
+                      key={o.id}
+                      style={{
+                        width: '100%', padding: '10px 14px', textAlign: 'left',
+                        background: form.organization === o.id ? 'var(--color-primary-light)' : 'none',
+                        border: 'none', cursor: 'pointer', fontSize: '.84rem',
+                        borderBottom: '1px solid var(--gray-xlt)',
+                        fontWeight: form.organization === o.id ? 600 : 400,
+                      }}
+                      onClick={() => {
+                        setForm((f) => ({ ...f, organization: o.id }));
+                        setOrgSearch('');
+                        setOrgDropOpen(false);
+                        setError(null);
+                      }}
+                    >
+                      {o.name}
+                      <span style={{ fontSize: '.7rem', color: 'var(--gray)', marginLeft: '8px' }}>
+                        {o._entity_type === 'institution' ? 'Institution' : 'Facility'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* License Type */}
+            <div className="field">
+              <label className="lbl">License Type <span className="req">*</span></label>
+              <select className="sel" value={form.licenseType}
+                onChange={(e) => { setForm((f) => ({ ...f, licenseType: e.target.value })); setError(null); }}>
+                <option value="">Select type</option>
+                {LICENSE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+
+            {/* Seats */}
+            <div className="field">
+              <label className="lbl">Seats</label>
+              <input className="inp" type="number" min={1} placeholder="e.g. 10 (leave blank for unlimited)"
+                value={form.seats}
+                onChange={(e) => setForm((f) => ({ ...f, seats: e.target.value }))} />
+            </div>
+
+            {/* Expiration Date */}
+            <div className="field">
+              <label className="lbl">Expiration Date <span className="req">*</span></label>
+              <input className="inp" type="date" value={form.expirationDate}
+                min={new Date().toISOString().split('T')[0]}
+                onChange={(e) => { setForm((f) => ({ ...f, expirationDate: e.target.value })); setError(null); }} />
+            </div>
+
+            {/* Payment Method */}
+            <div className="field">
+              <label className="lbl">Payment Method</label>
+              <select className="sel" value={form.paymentMethod}
+                onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))}>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Mobile Money">Mobile Money</option>
+                <option value="Cash">Cash</option>
+                <option value="Invoice">Invoice</option>
+                <option value="Waived">Waived</option>
+              </select>
+            </div>
+
+            {/* Notes */}
+            <div className="field span2">
+              <label className="lbl">Notes</label>
+              <textarea className="inp" rows={2} placeholder="Optional notes about this license…"
+                style={{ resize: 'none' }} value={form.notes}
+                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+            <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+            <button className="btn btn-red" onClick={handleSubmit} disabled={saving}>
+              {saving ? 'Issuing…' : 'Issue License'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function LicensesView({
   onToast,
   refreshKey = 0,
@@ -37,6 +243,7 @@ export default function LicensesView({
   const [licenses, setLicenses]         = useState<LicenseItem[]>([]);
   const [loading, setLoading]           = useState(true);
   const [viewingLicense, setViewingLicense] = useState<LicenseItem | null>(null);
+  const [issueLicenseOpen, setIssueLicenseOpen] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -160,6 +367,9 @@ export default function LicensesView({
           <div className="pg-title">License Management</div>
           <div className="pg-sub">Subscriptions and billing across all organizations</div>
         </div>
+        <button className="btn btn-red" onClick={() => setIssueLicenseOpen(true)}>
+          + Issue License
+        </button>
       </div>
 
       {/* KPIs */}
@@ -280,6 +490,14 @@ export default function LicensesView({
           }}
         />
       )}
+
+      {/* ── Issue License Modal ── */}
+      <IssueLicenseModalInline
+        isOpen={issueLicenseOpen}
+        onClose={() => setIssueLicenseOpen(false)}
+        onToast={onToast}
+        onSuccess={() => { setIssueLicenseOpen(false); loadAll(); }}
+      />
     </div>
   );
 }
