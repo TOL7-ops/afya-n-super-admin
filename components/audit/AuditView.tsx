@@ -57,12 +57,6 @@ export default function AuditView({ onToast }: AuditViewProps) {
           }}>
             Updated {lastRefreshed.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
           </span>
-          <button className="btn btn-ghost" onClick={handleRefresh} disabled={refreshing}>
-            {refreshing ? '↻ Refreshing…' : '↻ Refresh'}
-          </button>
-          <button className="btn btn-ghost" onClick={handleExport}>
-            Export Log ↓
-          </button>
         </div>
       </div>
 

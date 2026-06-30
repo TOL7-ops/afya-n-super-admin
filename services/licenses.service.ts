@@ -36,6 +36,11 @@ export interface SubscriptionsResponse {
  * GET /api/v1/super-admin/subscriptions
  * Returns both the KPI header values AND the full subscription list.
  * Use this instead of calling list + summary separately.
+ *
+ * NOTE: The backend may return multiple subscription rows for the same organisation
+ * (see MISSING_ENDPOINTS.md §CRITICAL BUG). We do NOT deduplicate by name here —
+ * the table shows exactly what the API returns so problems remain visible.
+ * Duplicate submission is prevented in the Issue License modal instead.
  */
 export async function getSubscriptions(): Promise<SubscriptionsResponse> {
   const res = await api.get<unknown>('/api/v1/super-admin/subscriptions');
@@ -45,11 +50,34 @@ export async function getSubscriptions(): Promise<SubscriptionsResponse> {
   const total_mrr    = typeof raw?.total_mrr    === 'number' ? raw.total_mrr    : 0;
   const items        = unwrapArray<LicenseItem>(raw, 'Licenses');
 
-  // De-duplicate by id
+  // De-duplicate only by exact id — no name collapsing.
   const seen = new Map<string, LicenseItem>();
   for (const item of items) {
     const key = String(item.id);
     if (!seen.has(key)) seen.set(key, item);
+  }
+
+  // Developer logging — detect same-name duplicates so the backend team can trace them.
+  if (process.env.NODE_ENV !== 'production') {
+    const byName = new Map<string, LicenseItem[]>();
+    for (const item of seen.values()) {
+      const r    = item as Record<string, unknown>;
+      const name = ((r.name as string | null) ?? item.institution_name ?? '').trim().toLowerCase();
+      if (!name) continue;
+      if (!byName.has(name)) byName.set(name, []);
+      byName.get(name)!.push(item);
+    }
+    for (const [name, rows] of byName.entries()) {
+      if (rows.length > 1) {
+        console.warn(
+          '[Licenses] ⚠ Duplicate subscriptions for org name:', name,
+          '| count:', rows.length,
+          '| IDs:', rows.map((r) => r.id).join(', '),
+          '| Plans:', rows.map((r) => r.plan).join(', '),
+          '→ Root cause: POST /subscriptions uses institution_name not institution_id',
+        );
+      }
+    }
   }
 
   return {

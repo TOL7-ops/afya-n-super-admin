@@ -6,6 +6,33 @@
 
 ---
 
+## ⚠️ CRITICAL BUG — Duplicate Subscriptions on Issue License
+
+**Root cause:** `POST /api/v1/super-admin/subscriptions` accepts `institution_name` (string)
+instead of `institution_id` (UUID). Each call creates a **new subscription row** keyed only
+by name, rather than attaching to an existing organisation. If called twice for the same org
+(or if the name doesn't exactly match the stored name), it creates a duplicate record.
+
+**Evidence in data:** `{ name: " nan", plan: "Plus" }` rows — orphan records from calls where
+`institution_name` was empty or didn't resolve to a real org.
+
+**Frontend workaround applied:** `getSubscriptions()` now de-duplicates by `name` (case-insensitive,
+trimmed), keeping the most recent subscription. This prevents duplicates from rendering but does
+NOT clean up the database.
+
+**Required backend fix:**
+1. Change `POST /api/v1/super-admin/subscriptions` to accept `institution_id: UUID` (not `institution_name`)
+2. The backend should find the existing facility/institution record by ID and attach the subscription
+3. Optionally: add a unique constraint on `(institution_id, is_active=true)` to prevent duplicate active subscriptions per org
+4. Clean up existing orphan rows (`name = " nan"` or names that don't match any institution)
+
+**Files involved:**
+- `services/licenses.service.ts` — `issueLicense()` payload, `getSubscriptions()` dedup
+- `components/licenses/LicensesView.tsx` — `IssueLicenseModalInline.handleSubmit()`
+- Backend: `POST /api/v1/super-admin/subscriptions` handler
+
+---
+
 ## How to Read This File
 
 | Symbol | Meaning |

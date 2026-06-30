@@ -9,6 +9,7 @@ import {
   sendLicenseReminder,
   sendRenewalEmail,
   issueLicense,
+  performLicenseAction,
 } from '@/services/licenses.service';
 import type { LicenseItem } from '@/types/api';
 import { cleanPlanLabel } from '@/utils/planAmount';
@@ -37,10 +38,12 @@ interface IssueLicenseModalInlineProps {
   onClose: () => void;
   onToast: (msg: string, type?: '' | 'success' | 'warn') => void;
   onSuccess: () => void;
+  /** Currently loaded subscriptions — used to detect duplicates before submitting */
+  existingSubs: LicenseItem[];
 }
 
-function IssueLicenseModalInline({ isOpen, onClose, onToast, onSuccess }: IssueLicenseModalInlineProps) {
-  const storeOrgs = useInstitutionsStore((s) => s.institutions);
+function IssueLicenseModalInline({ isOpen, onClose, onToast, onSuccess, existingSubs }: IssueLicenseModalInlineProps) {
+  const storeOrgs  = useInstitutionsStore((s) => s.institutions);
 
   const EMPTY_FORM = {
     organization: '',
@@ -51,11 +54,20 @@ function IssueLicenseModalInline({ isOpen, onClose, onToast, onSuccess }: IssueL
     notes: '',
   };
 
-  const [form, setForm]   = useState({ ...EMPTY_FORM });
-  const [saving, setSaving] = useState(false);
-  const [error, setError]  = useState<string | null>(null);
-  const [orgSearch, setOrgSearch] = useState('');
+  const [form, setForm]         = useState({ ...EMPTY_FORM });
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+  const [orgSearch, setOrgSearch]   = useState('');
   const [orgDropOpen, setOrgDropOpen] = useState(false);
+
+  // Duplicate-guard confirmation state
+  type DupAction = 'renew' | 'upgrade' | 'issue_anyway';
+  const [dupModal, setDupModal] = useState<{
+    existingSub: LicenseItem;
+    orgName: string;
+  } | null>(null);
+  const [dupSaving, setDupSaving] = useState(false);
+  const [dupMessage, setDupMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -63,6 +75,8 @@ function IssueLicenseModalInline({ isOpen, onClose, onToast, onSuccess }: IssueL
       setSaving(false);
       setError(null);
       setOrgSearch('');
+      setDupModal(null);
+      setDupMessage(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
@@ -73,29 +87,103 @@ function IssueLicenseModalInline({ isOpen, onClose, onToast, onSuccess }: IssueL
     o.name.toLowerCase().includes(orgSearch.toLowerCase())
   );
 
+  /** Find any active subscription for the selected org (match by name — no institution_id yet) */
+  const findExistingSubscription = (orgName: string): LicenseItem | null => {
+    const normalised = orgName.trim().toLowerCase();
+    return existingSubs.find((sub) => {
+      const raw  = sub as Record<string, unknown>;
+      const name = ((raw.name as string | null) ?? sub.institution_name ?? '').trim().toLowerCase();
+      return name === normalised && sub.is_active !== false;
+    }) ?? null;
+  };
+
+  /** Actual POST call — used both for "Issue Anyway" and first-time issue */
+  const doIssueLicense = async (orgName: string) => {
+    console.log('[IssueLicense] Submitting for org:', orgName, 'id:', selectedOrg?.id ?? 'unknown');
+    await issueLicense({
+      institution_name: orgName.trim(),
+      plan:             form.licenseType,
+      start_date:       new Date().toISOString(),
+      seats:            form.seats ? Number(form.seats) : 10,
+      payment_method:   form.paymentMethod,
+    });
+  };
+
   const handleSubmit = async () => {
     if (!form.organization)   { setError('Please select an organization.'); return; }
     if (!form.licenseType)    { setError('Please select a license type.'); return; }
     if (!form.expirationDate) { setError('Please set an expiration date.'); return; }
 
+    const orgName    = selectedOrg!.name;
+    const existingSub = findExistingSubscription(orgName);
+
+    if (existingSub) {
+      // Block and show confirmation — don't fire the API yet
+      console.warn(
+        '[IssueLicense] Org already has an active subscription:',
+        '\n  Org:', orgName, '| Org ID:', selectedOrg?.id,
+        '\n  Existing sub ID:', existingSub.id,
+        '\n  Existing plan:', existingSub.plan,
+        '\n  is_active:', existingSub.is_active,
+      );
+      setDupModal({ existingSub, orgName });
+      return;
+    }
+
+    // No existing subscription — proceed directly
     setSaving(true);
     setError(null);
-
     try {
-      await issueLicense({
-        institution_name: selectedOrg!.name,
-        plan:             form.licenseType,
-        start_date:       new Date().toISOString(),
-        seats:            form.seats ? Number(form.seats) : 10,
-        payment_method:   form.paymentMethod,
-      });
-      onToast(`License issued to ${selectedOrg!.name}`, 'success');
+      await doIssueLicense(orgName);
+      onToast(`License issued to ${orgName}`, 'success');
       onSuccess();
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail;
       setError(typeof detail === 'string' ? detail : 'Failed to issue license — try again');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDupAction = async (action: DupAction) => {
+    if (!dupModal) return;
+    const { orgName, existingSub } = dupModal;
+
+    if (action === 'renew') {
+      setDupSaving(true);
+      setDupMessage(null);
+      try {
+        await performLicenseAction(existingSub.id, 'RENEW');
+        setDupModal(null);
+        onToast(`Renewal triggered for ${orgName}`, 'success');
+        onSuccess();
+      } catch {
+        setDupMessage('Renew endpoint is not yet available.');
+      } finally {
+        setDupSaving(false);
+      }
+      return;
+    }
+
+    if (action === 'upgrade') {
+      // No upgrade endpoint available yet
+      setDupMessage('Upgrade endpoint is not yet available. Contact backend team.');
+      return;
+    }
+
+    // issue_anyway — user explicitly confirmed
+    setDupSaving(true);
+    setDupMessage(null);
+    try {
+      await doIssueLicense(orgName);
+      setDupModal(null);
+      onToast(`License issued to ${orgName}`, 'success');
+      onSuccess();
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      setDupMessage(typeof detail === 'string' ? detail : 'Failed to issue license — try again');
+    } finally {
+      setDupSaving(false);
     }
   };
 
@@ -230,6 +318,87 @@ function IssueLicenseModalInline({ isOpen, onClose, onToast, onSuccess }: IssueL
           </div>
         </div>
       </div>
+
+      {/* ── Duplicate subscription confirmation ── */}
+      {dupModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 600,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,.55)',
+          }}
+          onClick={() => { if (!dupSaving) { setDupModal(null); setDupMessage(null); } }}
+        >
+          <div
+            style={{
+              background: 'var(--color-primary-light)', borderRadius: '8px',
+              padding: '28px', maxWidth: '440px', width: 'calc(100% - 32px)',
+              boxShadow: '0 8px 32px rgba(0,0,0,.22)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--ink)', marginBottom: '10px' }}>
+              This organisation already has an active license.
+            </div>
+            <p style={{ fontSize: '.84rem', color: 'var(--gray)', lineHeight: 1.6, marginBottom: '8px' }}>
+              <strong style={{ color: 'var(--ink)' }}>{dupModal.orgName}</strong> currently has a{' '}
+              <strong style={{ color: 'var(--ink)' }}>{dupModal.existingSub.plan ?? 'active'}</strong>{' '}
+              subscription. Issuing another license may create a duplicate subscription record.
+            </p>
+            <p style={{ fontSize: '.84rem', color: 'var(--gray)', lineHeight: 1.6, marginBottom: '20px' }}>
+              Would you like to renew or upgrade the existing license instead?
+            </p>
+
+            {dupMessage && (
+              <div style={{
+                marginBottom: '14px', padding: '9px 12px',
+                background: 'var(--amber-bg)', border: '1px solid var(--amber-border)',
+                borderRadius: '3px', fontSize: '.78rem', color: 'var(--amber)',
+              }}>
+                {dupMessage}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-ghost"
+                onClick={() => { setDupModal(null); setDupMessage(null); }}
+                disabled={dupSaving}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => handleDupAction('renew')}
+                disabled={dupSaving}
+              >
+                {dupSaving ? '…' : 'Renew License'}
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => handleDupAction('upgrade')}
+                disabled={dupSaving}
+              >
+                Upgrade Plan
+              </button>
+              <button
+                className="btn"
+                style={{
+                  background: 'var(--red)', color: 'white',
+                  border: '1px solid var(--red)', minHeight: '44px',
+                  fontSize: '.8rem', fontWeight: 500, padding: '9px 16px',
+                  borderRadius: '3px', cursor: 'pointer',
+                  opacity: dupSaving ? 0.6 : 1,
+                }}
+                onClick={() => handleDupAction('issue_anyway')}
+                disabled={dupSaving}
+              >
+                {dupSaving ? 'Issuing…' : 'Issue Anyway'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -497,6 +666,7 @@ export default function LicensesView({
         onClose={() => setIssueLicenseOpen(false)}
         onToast={onToast}
         onSuccess={() => { setIssueLicenseOpen(false); loadAll(); }}
+        existingSubs={licenses}
       />
     </div>
   );

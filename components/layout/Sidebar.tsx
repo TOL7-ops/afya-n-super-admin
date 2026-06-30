@@ -41,7 +41,7 @@ const PLATFORM_NAV: NavItem[] = [
 const OPS_NAV: NavItem[] = [
   { id: 'users',    icon: '👥', label: 'All Users' },
   { id: 'audit',    icon: '📋', label: 'Audit Log' },
-  { id: 'settings', icon: '⚙',  label: 'System Settings' },
+  // { id: 'settings', icon: '⚙',  label: 'System Settings' },  // commented out
 ];
 
 export default function Sidebar({

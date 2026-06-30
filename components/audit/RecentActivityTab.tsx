@@ -144,10 +144,7 @@ export default function RecentActivityTab({
         <select className="filter-sel" value={actionFilter} onChange={(e) => setAction(e.target.value)}>
           {ACTION_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
         </select>
-        {/* Actions */}
-        <button className="btn btn-ghost" onClick={onRefresh} disabled={refreshing} style={{ minWidth: '90px' }}>
-          {refreshing ? '↻ …' : '↻ Refresh'}
-        </button>
+        {/* Export */}
         <button className="btn btn-ghost" onClick={onExport}>Export ↓</button>
       </div>
 

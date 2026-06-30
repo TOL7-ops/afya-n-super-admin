@@ -283,8 +283,7 @@ export default function AdminShell() {
             <InstitutionsView
               facilities={facilities}
               loading={facilitiesLoading}
-              onAddFacility={addFacilityModal.open}
-              onAddInstitution={addInstitutionModal.open}
+              onAddOrganisation={() => {/* handled internally by OrganisationsView */}}
               onToast={showToast}
               onRefresh={refetchFacilities}
             />
@@ -331,7 +330,8 @@ export default function AdminShell() {
       </div>
 
       {/* ── Modals ── */}
-      <AddFacilityModal
+      {/* AddFacilityModal and AddInstitutionModal replaced by unified AddOrganisationModal inside OrganisationsView */}
+      {/* <AddFacilityModal
         isOpen={addFacilityModal.isOpen}
         onClose={addFacilityModal.close}
         onComplete={handleOrgComplete}
@@ -343,7 +343,7 @@ export default function AdminShell() {
         onClose={addInstitutionModal.close}
         onComplete={handleOrgComplete}
         onToast={showToast}
-      />
+      /> */}
 
       <ConvertTrialModal
         isOpen={convertModal.isOpen}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import Badge, { institutionTypeVariant } from '@/components/shared/Badge';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import api from '@/lib/api';
@@ -9,12 +9,12 @@ import type { FacilityResponse } from '@/types/api';
 import { deriveLicenseStatus, statusToVariant } from '@/utils/licenseStatus';
 import SeatsCell from '@/components/shared/SeatsCell';
 import OrgDetailsPanel from '@/components/shared/OrgDetailsPanel';
+import AddOrganisationModal from '@/components/modals/AddOrganisationModal';
 
 interface OrganisationsViewProps {
   facilities: FacilityResponse[];
   loading: boolean;
-  onAddFacility: () => void;
-  onAddInstitution: () => void;
+  onAddOrganisation: () => void;
   onToast: (msg: string, type?: ToastType) => void;
   /** Called after a suspend/reactivate so the parent can refetch */
   onRefresh: () => void;
@@ -46,30 +46,17 @@ function entityBase(entityType: 'facility' | 'institution'): string {
 export default function OrganisationsView({
   facilities,
   loading,
-  onAddFacility,
-  onAddInstitution,
+  onAddOrganisation,
   onToast,
   onRefresh,
 }: OrganisationsViewProps) {
   const [tab, setTab]                       = useState<Tab>('facilities');
   const [search, setSearch]                 = useState('');
   const [statusFilter, setStatusFilter]     = useState<StatusFilter>('');
-  const [dropdownOpen, setDropdownOpen]     = useState(false);
   const [confirmSuspend, setConfirmSuspend] = useState<ConfirmSuspend | null>(null);
   const [suspending, setSuspending]         = useState(false);
   const [selectedOrg, setSelectedOrg]       = useState<FacilityResponse | null>(null);
-  const dropRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  const [showAddOrg, setShowAddOrg]         = useState(false);
 
   // ── Reactivate — direct, no confirmation ────────────────────────────────
   const handleReactivate = useCallback(async (f: FacilityResponse) => {
@@ -187,48 +174,13 @@ export default function OrganisationsView({
           <div className="pg-sub">All registered organisations on the Afya platform</div>
         </div>
 
-        {/* + Add dropdown */}
-        <div style={{ position: 'relative' }} ref={dropRef}>
-          <button
-            className="btn btn-red"
-            onClick={() => setDropdownOpen((v) => !v)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            + Add ▾
-          </button>
-          {dropdownOpen && (
-            <div style={{
-              position: 'absolute', right: 0, top: 'calc(100% + 6px)',
-              background: 'var(--color-primary-light)', border: '1px solid var(--blue-border)',
-              borderRadius: '4px', boxShadow: '0 4px 16px rgba(0,0,0,.1)',
-              minWidth: '220px', zIndex: 100,
-            }}>
-              <button
-                style={{
-                  width: '100%', padding: '12px 16px', textAlign: 'left',
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  borderBottom: '1px solid var(--gray-xlt)',
-                  display: 'flex', flexDirection: 'column', gap: '2px',
-                }}
-                onClick={() => { setDropdownOpen(false); onAddFacility(); }}
-              >
-                <span style={{ fontWeight: 600, fontSize: '.84rem' }}>🏥 Add Clinical Facility</span>
-                <span style={{ fontSize: '.72rem', color: 'var(--gray)' }}>Hospital, clinic, etc</span>
-              </button>
-              <button
-                style={{
-                  width: '100%', padding: '12px 16px', textAlign: 'left',
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  display: 'flex', flexDirection: 'column', gap: '2px',
-                }}
-                onClick={() => { setDropdownOpen(false); onAddInstitution(); }}
-              >
-                <span style={{ fontWeight: 600, fontSize: '.84rem' }}>🏛 Add Institution / NGO</span>
-                <span style={{ fontSize: '.72rem', color: 'var(--gray)' }}>Programme, employer</span>
-              </button>
-            </div>
-          )}
-        </div>
+        {/* + Add Organisation button */}
+        <button
+          className="btn btn-red"
+          onClick={() => setShowAddOrg(true)}
+        >
+          + Add Organisation
+        </button>
       </div>
 
       {/* ── Tabs ── */}
@@ -506,6 +458,14 @@ export default function OrganisationsView({
           setSelectedOrg(null);
           handleReactivate(org);
         }}
+      />
+
+      {/* ── Add Organisation modal ── */}
+      <AddOrganisationModal
+        isOpen={showAddOrg}
+        onClose={() => setShowAddOrg(false)}
+        onComplete={onRefresh}
+        onToast={onToast}
       />
     </div>
   );

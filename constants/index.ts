@@ -527,16 +527,27 @@ export const INSTITUTION_TYPES = [
   'Research Institution',
 ];
 
-export const REGIONS = [
-  'Volta Region',
-  'Greater Accra',
+export const GHANA_REGIONS = [
+  'Ahafo',
   'Ashanti',
-  'Western',
+  'Bono',
+  'Bono East',
   'Central',
-  'Northern',
   'Eastern',
-  'Other',
+  'Greater Accra',
+  'North East',
+  'Northern',
+  'Oti',
+  'Savannah',
+  'Upper East',
+  'Upper West',
+  'Volta',
+  'Western',
+  'Western North',
 ];
+
+/** @deprecated Use GHANA_REGIONS */
+export const REGIONS = GHANA_REGIONS.map((r) => `${r} Region`);
 
 export const LICENSE_PLANS = [
   '30-day Free Trial',
