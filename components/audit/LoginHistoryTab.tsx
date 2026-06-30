@@ -3,27 +3,18 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '@/lib/api';
 import { getAccessToken } from '@/services/authService';
-import { exportAuditLogCsv } from '@/services/users.service';
 import type { ToastType } from '@/types';
 
+// ─── Confirmed API shape from GET /api/v1/super-admin/audit-logs/logins ────────
 interface LoginEntry {
-  user_name?: string | null;
-  full_name?: string | null;
-  agent_name?: string | null;
-  email?: string | null;
-  role?: string | null;
-  facility_name?: string | null;
-  institution_name?: string | null;
-  organisation?: string | null;
-  status?: string | null;           // "Success" | "Failed" | null
-  ip_address?: string | null;
-  device?: string | null;
-  browser?: string | null;
-  os?: string | null;
-  user_agent?: string | null;
-  timestamp?: string | null;
-  logged_in_at?: string | null;
-  created_at?: string | null;
+  id: string;
+  timestamp: string;
+  email: string | null;
+  agent_name: string | null;
+  role: string | null;
+  status: 'SUCCESS' | 'FAILED' | null;  // null = old records before status was tracked
+  failure_reason: string | null;
+  institution: string | null;           // org name, "None" if no institution
   [key: string]: unknown;
 }
 
@@ -48,48 +39,38 @@ function fmtTime(iso: string | null | undefined): string {
   } catch { return iso ?? '—'; }
 }
 
-/** Attempt to parse a browser/OS from a raw user-agent string */
-function parseUserAgent(ua: string | null | undefined): { browser: string; os: string } {
-  if (!ua) return { browser: '—', os: '—' };
-  const s = ua.toLowerCase();
-  const browser =
-    s.includes('chrome')  ? 'Chrome'  :
-    s.includes('firefox') ? 'Firefox' :
-    s.includes('safari') && !s.includes('chrome') ? 'Safari' :
-    s.includes('edge')    ? 'Edge'    :
-    'Unknown';
-  const os =
-    s.includes('android')    ? 'Android' :
-    s.includes('iphone') || s.includes('ipad') ? 'iOS' :
-    s.includes('windows')    ? 'Windows' :
-    s.includes('mac')        ? 'macOS'   :
-    s.includes('linux')      ? 'Linux'   :
-    '—';
-  return { browser, os };
+/** True = successful or unknown (null). False = explicitly FAILED. */
+function isSuccess(status: LoginEntry['status']): boolean {
+  return status !== 'FAILED';
 }
 
+const COL = '180px 1fr 90px 1fr 150px';  // User · Organisation · Status · Reason · Time
+
 export default function LoginHistoryTab({ onToast }: LoginHistoryTabProps) {
-  const [logins, setLogins]       = useState<LoginEntry[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [logins, setLogins]           = useState<LoginEntry[]>([]);
+  const [total, setTotal]             = useState<number | null>(null);
+  const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
   const [search, setSearch]         = useState('');
-  const [statusFilter, setStatus]   = useState<'all' | 'Success' | 'Failed'>('all');
+  const [statusFilter, setStatus]   = useState<'all' | 'SUCCESS' | 'FAILED'>('all');
 
   const fetchLogins = useCallback(async () => {
     if (!getAccessToken()) return;
     try {
       const res = await api.get<unknown>('/api/v1/super-admin/audit-logs/logins');
-      const raw = res.data;
-      const data: LoginEntry[] = Array.isArray(raw)
+      const raw = res.data as Record<string, unknown>;
+      const items: LoginEntry[] = Array.isArray(raw)
         ? (raw as LoginEntry[])
-        : ((raw as Record<string, unknown>)?.['items'] as LoginEntry[] | undefined) ??
-          ((raw as Record<string, unknown>)?.['data'] as LoginEntry[] | undefined) ??
-          ((raw as Record<string, unknown>)?.['logs'] as LoginEntry[] | undefined) ??
-          [];
-      setLogins(data);
-      console.log('[LoginHistory] entries:', data.length, 'sample:', data[0]);
+        : ((raw['items'] as LoginEntry[] | undefined) ??
+           (raw['data']  as LoginEntry[] | undefined) ??
+           (raw['logs']  as LoginEntry[] | undefined) ??
+           []);
+      const serverTotal = typeof raw['total'] === 'number' ? raw['total'] : items.length;
+      setLogins(items);
+      setTotal(serverTotal);
+      console.log('[LoginHistory] loaded:', items.length, '/ total:', serverTotal);
     } catch (err) {
       console.error('[LoginHistory] fetch failed:', err);
       setLogins([]);
@@ -102,41 +83,28 @@ export default function LoginHistoryTab({ onToast }: LoginHistoryTabProps) {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
+    setLoading(true);
     await fetchLogins();
     setLastRefreshed(new Date());
     setRefreshing(false);
   }, [fetchLogins]);
-
-  const handleExport = async () => {
-    try {
-      onToast('Exporting…');
-      await exportAuditLogCsv();
-      onToast('Exported', 'success');
-    } catch {
-      onToast('Export failed — try again', 'warn');
-    }
-  };
-
   const filtered = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = search.trim().toLowerCase();
     return logins.filter((l) => {
-      const name = String(l.user_name ?? l.full_name ?? l.agent_name ?? '');
-      const org  = String(l.facility_name ?? l.institution_name ?? l.organisation ?? '');
       const matchSearch =
         !q ||
-        name.toLowerCase().includes(q) ||
-        org.toLowerCase().includes(q) ||
+        (l.agent_name ?? '').toLowerCase().includes(q) ||
         (l.email ?? '').toLowerCase().includes(q) ||
-        (l.ip_address ?? '').includes(q);
-      const loginStatus = (l.status ?? 'Success');
+        (l.institution ?? '').toLowerCase().includes(q) ||
+        (l.role ?? '').toLowerCase().includes(q);
       const matchStatus =
         statusFilter === 'all' ||
-        loginStatus.toLowerCase().includes(statusFilter.toLowerCase());
+        // null status treated as SUCCESS for filter purposes
+        (statusFilter === 'SUCCESS' ? l.status !== 'FAILED' : l.status === 'FAILED');
       return matchSearch && matchStatus;
     });
   }, [logins, search, statusFilter]);
 
-  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div>
       {/* Toolbar */}
@@ -145,58 +113,45 @@ export default function LoginHistoryTab({ onToast }: LoginHistoryTabProps) {
         borderBottom: '1px solid var(--gray-lt)', background: 'var(--off)',
         flexWrap: 'wrap', alignItems: 'center',
       }}>
-        {/* Search */}
         <div className="search-wrap" style={{ flex: 1, minWidth: '200px' }}>
           <svg className="search-ico" width="14" height="14" viewBox="0 0 24 24"
             fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
           <input className="search-input" type="text"
-            placeholder="Search by user, email, org, or IP…"
+            placeholder="Search by user, email or organisation…"
             value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
 
-        {/* Status filter */}
-        <select
-          className="filter-sel"
-          value={statusFilter}
-          onChange={(e) => setStatus(e.target.value as 'all' | 'Success' | 'Failed')}
-        >
+        <select className="filter-sel" value={statusFilter}
+          onChange={(e) => setStatus(e.target.value as 'all' | 'SUCCESS' | 'FAILED')}>
           <option value="all">All Statuses</option>
-          <option value="Success">Success</option>
-          <option value="Failed">Failed</option>
+          <option value="SUCCESS">Success</option>
+          <option value="FAILED">Failed</option>
         </select>
 
-        {/* Updated timestamp */}
         <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.62rem', color: 'var(--gray)', whiteSpace: 'nowrap' }}>
           Updated {lastRefreshed.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
         </span>
-
         <button className="btn btn-ghost" onClick={handleRefresh} disabled={refreshing} style={{ minWidth: '90px' }}>
           {refreshing ? '↻ …' : '↻ Refresh'}
         </button>
-        <button className="btn btn-ghost" onClick={handleExport}>Export ↓</button>
       </div>
 
       {/* Table header */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: '200px 1fr 100px 140px',
-        gap: '10px',
-        padding: '8px 20px',
-        background: 'var(--off)',
+        display: 'grid', gridTemplateColumns: COL, gap: '10px',
+        padding: '8px 20px', background: 'var(--off)',
         borderBottom: '1px solid var(--gray-lt)',
         fontFamily: "'JetBrains Mono',monospace",
         fontSize: '.56rem', letterSpacing: '.12em',
-        textTransform: 'uppercase' as const,
-        color: 'var(--color-primary)',
+        textTransform: 'uppercase' as const, color: 'var(--color-primary)',
       }}>
         <span>User</span>
         <span>Organisation</span>
         <span>Status</span>
-        {/* <span>IP Address</span> — commented out, not returned by API yet */}
-        {/* <span>Device / Browser</span> — commented out, not returned by API yet */}
-        <span style={{ textAlign: 'right' }}>Login Time</span>
+        <span>Failure Reason</span>
+        <span style={{ textAlign: 'right' }}>Time</span>
       </div>
 
       {/* Loading */}
@@ -208,122 +163,95 @@ export default function LoginHistoryTab({ onToast }: LoginHistoryTabProps) {
           </div>
         </div>
       ) : filtered.length === 0 ? (
-        /* Empty state */
         <div style={{ padding: '56px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: '2.4rem', marginBottom: '12px' }}>🔐</div>
           <div style={{ fontWeight: 600, fontSize: '.88rem', color: 'var(--ink)', marginBottom: '4px' }}>
             No login history available.
           </div>
           <div style={{ fontSize: '.76rem', color: 'var(--gray)' }}>
-            {search || statusFilter !== 'all'
-              ? 'Try adjusting your filters.'
-              : 'Login events will appear here once users sign in.'}
+            {search || statusFilter !== 'all' ? 'Try adjusting your filters.' : 'Login events will appear here once users sign in.'}
           </div>
         </div>
       ) : (
-        /* Rows */
         <div>
           {filtered.map((log, i) => {
-            const name       = String(log.user_name ?? log.full_name ?? log.agent_name ?? 'Unknown');
-            const email      = String(log.email ?? '');
-            const org        = String(log.facility_name ?? log.institution_name ?? log.organisation ?? '—');
-            const time       = String(log.timestamp ?? log.logged_in_at ?? log.created_at ?? '');
-            const ip         = String(log.ip_address ?? '—');
-            const rawUa      = String(log.user_agent ?? '');
-            const device     = log.device ?? log.browser ?? null;
-            const { browser, os } = parseUserAgent(rawUa || null);
-            const displayBrowser = device ? String(device) : browser;
-            const displayOs  = log.os ? String(log.os) : os;
-            const loginStatus = String(log.status ?? 'Success');
-            const isSuccess  = !loginStatus.toLowerCase().includes('fail') && !loginStatus.toLowerCase().includes('error');
-            const init       = initials(name);
+            const name   = log.agent_name ?? 'Unknown';
+            const email  = log.email ?? '';
+            const org    = (log.institution && log.institution !== 'None') ? log.institution : '—';
+            const time   = log.timestamp;
+            const ok     = isSuccess(log.status);
+            const reason = log.failure_reason;
+            const init   = initials(name);
 
             return (
-              <div
-                key={`login-${i}`}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '200px 1fr 100px 140px',
-                  gap: '10px',
-                  padding: '11px 20px',
-                  borderBottom: i < filtered.length - 1 ? '1px solid var(--gray-xlt)' : 'none',
-                  alignItems: 'center',
-                  transition: 'background .12s',
-                }}
-              >
+              <div key={log.id} style={{
+                display: 'grid', gridTemplateColumns: COL, gap: '10px',
+                padding: '11px 20px',
+                borderBottom: i < filtered.length - 1 ? '1px solid var(--gray-xlt)' : 'none',
+                alignItems: 'center',
+                background: ok ? 'transparent' : 'rgba(196,30,58,.025)',
+              }}>
                 {/* User */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                   <div style={{
                     width: '28px', height: '28px', borderRadius: '50%',
-                    background: isSuccess ? 'var(--color-primary)' : 'var(--red)',
-                    color: 'white',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: ok ? 'var(--color-primary)' : 'var(--red)',
+                    color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: '.6rem', fontWeight: 700, flexShrink: 0,
-                  }}>
-                    {init}
-                  </div>
+                  }}>{init}</div>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{
-                      fontSize: '.78rem', fontWeight: 600, color: 'var(--ink)',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
+                    <div style={{ fontSize: '.78rem', fontWeight: 600, color: 'var(--ink)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {name}
                     </div>
                     {email && (
-                      <div style={{ fontSize: '.66rem', color: 'var(--gray)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: '.66rem', color: 'var(--gray)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {email}
+                      </div>
+                    )}
+                    {log.role && (
+                      <div style={{ fontSize: '.62rem', color: 'var(--gray)', fontFamily: "'JetBrains Mono',monospace" }}>
+                        {log.role}
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Organisation */}
-                <div style={{ fontSize: '.78rem', color: 'var(--ink-mid)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: '.78rem', color: 'var(--ink-mid)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {org}
                 </div>
 
                 {/* Status badge */}
                 <div>
-                  <span style={{
-                    fontSize: '.65rem', fontWeight: 600, padding: '3px 9px',
-                    borderRadius: '999px',
-                    background: isSuccess ? 'var(--green-bg)' : 'var(--red-pale)',
-                    color: isSuccess ? 'var(--green)' : 'var(--red)',
-                    border: `1px solid ${isSuccess ? 'var(--green-border)' : 'var(--red-mist)'}`,
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {isSuccess ? '✓ Success' : '✕ Failed'}
-                  </span>
-                </div>
-
-                {/* IP address — commented out, not returned by API yet
-                <div style={{
-                  fontFamily: "'JetBrains Mono',monospace",
-                  fontSize: '.68rem', color: 'var(--gray)', whiteSpace: 'nowrap',
-                }}>
-                  {ip}
-                </div>
-                */}
-
-                {/* Device / Browser / OS — commented out, not returned by API yet
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '.74rem', color: 'var(--ink-mid)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {displayBrowser}
-                  </div>
-                  {displayOs !== '—' && (
-                    <div style={{ fontSize: '.65rem', color: 'var(--gray)', marginTop: '1px' }}>
-                      {displayOs}
-                    </div>
+                  {log.status === null ? (
+                    <span style={{ fontSize: '.65rem', color: 'var(--gray)',
+                      fontFamily: "'JetBrains Mono',monospace" }}>—</span>
+                  ) : (
+                    <span style={{
+                      fontSize: '.65rem', fontWeight: 600, padding: '3px 9px', borderRadius: '999px',
+                      background: ok ? 'var(--green-bg)' : 'var(--red-pale)',
+                      color: ok ? 'var(--green)' : 'var(--red)',
+                      border: `1px solid ${ok ? 'var(--green-border)' : 'var(--red-mist)'}`,
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {ok ? '✓ Success' : '✕ Failed'}
+                    </span>
                   )}
                 </div>
-                */}
+
+                {/* Failure Reason */}
+                <div style={{ fontSize: '.74rem', color: reason ? 'var(--red)' : 'var(--gray)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  fontStyle: reason ? 'normal' : 'italic' }}>
+                  {reason ?? '—'}
+                </div>
 
                 {/* Time */}
-                <div style={{
-                  fontFamily: "'JetBrains Mono',monospace",
-                  fontSize: '.66rem', color: 'var(--gray)',
-                  textAlign: 'right', whiteSpace: 'nowrap',
-                }}>
+                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.66rem',
+                  color: 'var(--gray)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {fmtTime(time)}
                 </div>
               </div>
@@ -333,20 +261,18 @@ export default function LoginHistoryTab({ onToast }: LoginHistoryTabProps) {
       )}
 
       {/* Footer */}
-      {!loading && filtered.length > 0 && (
-        <div style={{
-          padding: '10px 20px', borderTop: '1px solid var(--gray-lt)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
+      {!loading && (
+        <div style={{ padding: '10px 20px', borderTop: '1px solid var(--gray-lt)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.62rem', color: 'var(--gray)' }}>
-            {filtered.length} sign-in{filtered.length !== 1 ? 's' : ''}
-            {filtered.length !== logins.length ? ` (filtered from ${logins.length})` : ''}
+            Showing {filtered.length}
+            {filtered.length !== logins.length ? ` of ${logins.length} loaded` : ''}
+            {total !== null && total > logins.length ? ` · ${total} total on server` : ''}
           </span>
           {(search || statusFilter !== 'all') && (
-            <button
-              onClick={() => { setSearch(''); setStatus('all'); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '.72rem', color: 'var(--color-primary)' }}
-            >
+            <button onClick={() => { setSearch(''); setStatus('all'); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '.72rem', color: 'var(--color-primary)' }}>
               Clear filters
             </button>
           )}

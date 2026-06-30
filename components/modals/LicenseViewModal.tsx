@@ -38,7 +38,7 @@ export default function LicenseViewModal({
     >
       <div className="modal" style={{ maxWidth: '480px' }}>
         <div className="modal-top">
-          <div className="modal-title">{data?.title ?? 'License Details'}</div>
+          <div className="modal-title">{data?.title ?? 'Subscription Details'}</div>
           <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <div className="modal-body">

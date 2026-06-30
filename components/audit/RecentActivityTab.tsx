@@ -33,7 +33,7 @@ function getBadge(action: string): BadgeCfg {
   if (a.includes('INSTITUTION') || a.includes('FACILITY') || a.includes('ORGANISATION') || a.includes('ONBOARD'))
     return { label: 'Organisation', bg: '#f5effc', color: '#6B3FA0', border: '#C9AAEA', dot: '#6B3FA0', severity: 'Info',     severityColor: '#1d4ed8', severityBg: '#dbeafe' };
   if (a.includes('LICENSE') || a.includes('SUBSCRIPTION') || a.includes('BILLING') || a.includes('PAYMENT'))
-    return { label: 'License',      bg: '#fff8ec', color: '#916200', border: '#EDD080', dot: '#916200', severity: 'Warning',  severityColor: '#92400e', severityBg: '#fef3c7' };
+    return { label: 'Subscription', bg: '#fff8ec', color: '#916200', border: '#EDD080', dot: '#916200', severity: 'Warning',  severityColor: '#92400e', severityBg: '#fef3c7' };
   if (a.includes('USER') || a.includes('SUSPEND') || a.includes('DEACTIVAT'))
     return { label: 'User',         bg: '#fdf2f4', color: '#C41E3A', border: '#F5D5DB', dot: '#C41E3A', severity: 'Warning',  severityColor: '#92400e', severityBg: '#fef3c7' };
   if (a.includes('SETTING') || a.includes('CONFIG') || a.includes('WHATSAPP'))

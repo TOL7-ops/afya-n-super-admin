@@ -33,7 +33,7 @@ const PLATFORM_NAV: NavItem[] = [
   { id: 'dashboard',     icon: '⊞', label: 'Dashboard' },
   { id: 'institutions',  icon: '🏛', label: 'Organisations', badge: true },
   { id: 'demo-requests', icon: '📥', label: 'Demo Requests' },
-  { id: 'licenses',      icon: '🔑', label: 'Licenses' },
+  { id: 'licenses',      icon: '🔑', label: 'Subscriptions' },
   { id: 'analytics',     icon: '📈', label: 'Platform Analytics' },
   { id: 'revenue',       icon: '💰', label: 'Revenue' },
 ];

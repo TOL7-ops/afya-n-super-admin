@@ -446,6 +446,7 @@ export default function OrganisationsView({
       <OrgDetailsPanel
         org={selectedOrg}
         onClose={() => setSelectedOrg(null)}
+        onToast={onToast}
         onSuspend={(org) => {
           setSelectedOrg(null);
           setConfirmSuspend({
