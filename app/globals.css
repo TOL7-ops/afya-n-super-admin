@@ -51,7 +51,7 @@ input, select, textarea { font-family: inherit; outline: none; }
 .topbar {
   height: 56px; flex-shrink: 0; display: flex; align-items: center;
   justify-content: space-between; padding: 0 24px; background: var(--color-primary);
-  border-bottom: 1px solid rgba(255,255,255,.08); z-index: 40;
+  border-bottom: 1px solid rgba(255,255,255,.08); z-index: 60;
   position: relative;
 }
 .topbar-left { display: flex; align-items: center; gap: 12px; }
@@ -280,33 +280,112 @@ input, select, textarea { font-family: inherit; outline: none; }
 /* BUTTONS */
 .btn {
   font-size: .82rem; font-weight: 500; padding: 9px 20px;
-  border-radius: 3px; transition: all .2s; min-height: 44px;
-  display: inline-flex; align-items: center;
+  border-radius: 8px;
+  transition: background 200ms ease-out, color 200ms ease-out,
+              box-shadow 200ms ease-out, transform 200ms ease-out,
+              border-color 200ms ease-out;
+  min-height: 44px;
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer; position: relative;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
 }
+.btn:active { transform: translateY(0) scale(0.98); box-shadow: none !important; }
 .btn:focus-visible {
-  outline: 3px solid rgba(7,72,128,.25);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(7,72,128,.35);
 }
-.btn-ghost { border: 1px solid var(--gray-lt); color: var(--ink-mid); }
-.btn-ghost:hover { border-color: var(--color-primary); color: var(--color-primary); }
-.btn-red { background: var(--color-primary); color: white; border: 1px solid var(--color-primary); }
-.btn-red:hover { background: var(--color-primary-hover); }
-.btn-blue { background: var(--blue); color: white; border: 1px solid var(--blue); }
-.btn-blue:hover { opacity: .88; }
-.btn-green { background: var(--green); color: white; border: 1px solid var(--green); }
-.btn-green:hover { opacity: .88; }
+.btn:disabled, .btn[disabled] {
+  opacity: 0.5; cursor: not-allowed;
+  transform: none !important; box-shadow: none !important;
+  pointer-events: none;
+}
+
+/* Primary — accent solid */
+.btn-red {
+  background: var(--color-primary); color: white;
+  border: 1px solid var(--color-primary);
+  box-shadow: 0 1px 2px rgba(7,72,128,.18);
+}
+.btn-red:hover {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+  box-shadow: 0 4px 12px rgba(7,72,128,.28);
+  transform: translateY(-1px);
+}
+
+/* Ghost — text only */
+.btn-ghost {
+  border: 1px solid var(--gray-lt); color: var(--ink-mid);
+  background: transparent; box-shadow: none;
+}
+.btn-ghost:hover {
+  background: var(--gray-xlt);
+  border-color: var(--gray);
+  color: var(--ink);
+  box-shadow: 0 2px 6px rgba(0,0,0,.07);
+  transform: translateY(-1px);
+}
+
+/* Colored solid variants */
+.btn-blue { background: var(--blue); color: white; border: 1px solid var(--blue); box-shadow: 0 1px 2px rgba(7,72,128,.18); }
+.btn-blue:hover { opacity: .88; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(7,72,128,.22); }
+.btn-green { background: var(--green); color: white; border: 1px solid var(--green); box-shadow: 0 1px 2px rgba(26,122,74,.18); }
+.btn-green:hover { opacity: .88; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(26,122,74,.22); }
+
+/* Small variant */
 .btn-sm {
-  font-size: .75rem; font-weight: 500; padding: 6px 13px; border-radius: 3px;
-  transition: all .2s; border: 1px solid var(--gray-lt); color: var(--ink-mid);
-  min-height: 44px; display: inline-flex; align-items: center;
+  font-size: .75rem; font-weight: 500; padding: 6px 13px; border-radius: 7px;
+  transition: background 200ms ease-out, color 200ms ease-out,
+              box-shadow 200ms ease-out, transform 200ms ease-out,
+              border-color 200ms ease-out;
+  border: 1px solid var(--gray-lt); color: var(--ink-mid);
+  min-height: 36px; display: inline-flex; align-items: center; gap: 5px;
+  cursor: pointer; background: transparent;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04);
 }
-.btn-sm:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.btn-sm:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-light); transform: translateY(-1px); }
+.btn-sm:active { transform: translateY(0) scale(0.98); }
+.btn-sm:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(7,72,128,.3); }
+.btn-sm:disabled { opacity: .5; cursor: not-allowed; pointer-events: none; }
+
+/* Icon/table-row action button */
 .btn-icon {
-  font-size: .75rem; font-weight: 500; padding: 5px 10px; border-radius: 3px;
-  transition: all .2s; border: 1px solid var(--gray-lt); color: var(--gray);
-  min-height: 44px; display: inline-flex; align-items: center;
+  font-size: .75rem; font-weight: 500; padding: 5px 12px; border-radius: 7px;
+  transition: background 200ms ease-out, color 200ms ease-out,
+              box-shadow 200ms ease-out, transform 200ms ease-out,
+              border-color 200ms ease-out;
+  border: 1px solid var(--gray-lt); color: var(--gray);
+  min-height: 36px; display: inline-flex; align-items: center; gap: 5px;
+  cursor: pointer; background: transparent;
 }
-.btn-icon:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.btn-icon:hover {
+  border-color: var(--color-primary); color: var(--color-primary);
+  background: var(--color-primary-light);
+  box-shadow: 0 2px 6px rgba(7,72,128,.12);
+  transform: translateY(-1px);
+}
+.btn-icon:active { transform: translateY(0) scale(0.98); box-shadow: none; }
+.btn-icon:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(7,72,128,.3); }
+.btn-icon:disabled { opacity: .5; cursor: not-allowed; pointer-events: none; }
+
+/* Destructive variant — used on Suspend-type icon buttons */
+.btn-icon.btn-danger:hover {
+  border-color: var(--red); color: var(--red);
+  background: var(--red-pale);
+  box-shadow: 0 2px 6px rgba(196,30,58,.12);
+}
+
+/* Reduced motion — keep all transitions instant/opacity-only */
+@media (prefers-reduced-motion: reduce) {
+  .btn, .btn-sm, .btn-icon {
+    transition: opacity 150ms ease, background 150ms ease, color 150ms ease !important;
+  }
+  .btn:hover, .btn-sm:hover, .btn-icon:hover,
+  .btn:active, .btn-sm:active, .btn-icon:active {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+}
 
 /* AUDIT LOG */
 .audit-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-xlt); }
@@ -588,4 +667,202 @@ input, select, textarea { font-family: inherit; outline: none; }
 
   .audit-row { flex-wrap: wrap; }
   .audit-time { width: 100%; margin-top: 2px; padding-left: 20px; }
+}
+
+/* =======================================================
+   MOBILE RESPONSIVE FIXES
+   Applied as overrides to handle encoding issues in
+   earlier rules. These take precedence via cascade.
+======================================================= */
+
+/* Part 1 — Fix: topbar must stay above sidebar drawer and backdrop */
+.topbar { z-index: 60 !important; position: relative !important; }
+
+/* Part 1 — Fix: hamburger sits inside topbar (z-index 60), always tappable */
+.hamburger {
+  position: relative;
+  z-index: 61;          /* above topbar itself for clarity */
+  min-width: 44px;
+  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Part 2 — Sidebar backdrop: smooth fade instead of snap */
+.sidebar-backdrop {
+  opacity: 0;
+  transition: opacity .28s ease;
+  pointer-events: none;
+}
+.sidebar-backdrop.open {
+  opacity: 1 !important;
+  pointer-events: all;
+}
+
+/* Part 2 — Sidebar: smooth slide with cubic-bezier */
+.sidebar { transition: transform .3s cubic-bezier(0.16, 1, 0.3, 1) !important; }
+
+/* OrgDetailsPanel: never wider than viewport on mobile */
+@media (max-width: 767px) {
+  /* Hamburger always visible and tappable */
+  .hamburger { display: flex !important; }
+
+  /* Slide-over panels: full-width on mobile */
+  [style*="width: 440px"],
+  [style*="width: 420px"] {
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
+
+  /* Tables: contained horizontal scroll, never overflow page */
+  .tbl-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  /* Page header: stack on very narrow screens */
+  .pg-hdr {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .pg-hdr .btn, .pg-hdr .btn-red, .pg-hdr .btn-ghost {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* KPI rows: single column on mobile */
+  .kpi-row   { grid-template-columns: 1fr 1fr !important; }
+  .kpi-row-3 { grid-template-columns: 1fr 1fr !important; }
+  .kpi-val   { font-size: 1.6rem !important; }
+
+  /* Cards */
+  .card-body { padding: 12px !important; }
+
+  /* Search/filter bars: stack vertically */
+  .search-bar { flex-direction: column !important; }
+  .search-wrap { min-width: 100% !important; flex: none !important; }
+  .filter-sel  { min-width: 100% !important; width: 100% !important; }
+
+  /* Modals: sheet-style from bottom */
+  .modal-overlay { align-items: flex-end !important; }
+  .modal {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    border-radius: 16px 16px 0 0 !important;
+    max-height: 92vh !important;
+  }
+
+  /* Audit log tables: card-list layout on mobile */
+  .audit-log-table thead { display: none; }
+  .audit-log-table tbody tr {
+    display: flex;
+    flex-direction: column;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--gray-xlt);
+    gap: 4px;
+  }
+  .audit-log-table td {
+    padding: 0 !important;
+    border: none !important;
+    font-size: .8rem !important;
+  }
+  .audit-log-table td::before {
+    content: attr(data-label);
+    display: inline;
+    font-weight: 600;
+    color: var(--gray);
+    margin-right: 6px;
+    font-size: .7rem;
+    text-transform: uppercase;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: .06em;
+  }
+
+  /* Nav items: always full tap target */
+  .nav-item { min-height: 48px !important; }
+
+  /* Topbar padding tighter on small screens */
+  .topbar { padding: 0 12px !important; }
+
+  /* Main content: no side overflow */
+  .main { overflow-x: hidden; }
+  body   { overflow-x: hidden; }
+
+  /* Prevent any element from causing horizontal scroll */
+  .view { overflow-x: hidden; }
+}
+
+@media (max-width: 430px) {
+  /* Very narrow: single column KPIs */
+  .kpi-row   { grid-template-columns: 1fr !important; }
+  .kpi-row-3 { grid-template-columns: 1fr !important; }
+
+  /* Filter toolbar: vertical stack */
+  .filter-toolbar-row {
+    flex-direction: column !important;
+  }
+  .filter-toolbar-row select,
+  .filter-toolbar-row input {
+    width: 100% !important;
+    flex: none !important;
+  }
+}
+
+/* Reduced motion: instant sidebar transition */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar { transition: none !important; }
+  .sidebar-backdrop { transition: none !important; }
+}
+
+/* =======================================================
+   AUDIT LOG — Mobile card layout
+   The login history and activity tabs use CSS grid divs.
+   On mobile we stack each row as a card.
+======================================================= */
+@media (max-width: 767px) {
+
+  /* Login History: hide the desktop column header row */
+  .login-history-header { display: none !important; }
+
+  /* Each login row becomes a stacked card */
+  .login-history-row {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: unset !important;
+    padding: 14px 16px !important;
+    gap: 4px !important;
+    border-bottom: 1px solid var(--gray-xlt);
+  }
+  .login-history-row > * { white-space: normal !important; }
+
+  /* Activity tab: hide desktop column header */
+  .activity-header { display: none !important; }
+
+  /* Activity row becomes card */
+  .activity-row {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: unset !important;
+    padding: 14px 16px !important;
+    gap: 4px !important;
+  }
+  .activity-row > * { white-space: normal !important; overflow: visible !important; text-overflow: unset !important; }
+
+  /* Audit toolbar: full-width inputs */
+  .audit-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .audit-toolbar .search-wrap,
+  .audit-toolbar .filter-sel,
+  .audit-toolbar select {
+    width: 100% !important;
+    min-width: 100% !important;
+    flex: none !important;
+  }
+
+  /* Subscriptions/licenses table scroll on mobile */
+  .tbl-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tbl-scroll .tbl { min-width: 600px; }
 }

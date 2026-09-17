@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
-import { GHANA_REGIONS, LICENSE_PLANS } from '@/constants';
+import { GHANA_REGIONS } from '@/constants';
+import { getSubscriptionPlans } from '@/services/licenses.service';
+import type { SubscriptionPlan } from '@/types/api';
 import type { ToastType } from '@/types';
 
 interface AddOrganisationModalProps {
@@ -45,9 +47,9 @@ const EMPTY = {
   contact_name: '',
   email: '',
   phone: '',
-  license_plan: '30-day Free Trial',
-  max_seats: '10',   // facility
-  seats: '1',        // institution
+  license_plan: '',   // set dynamically once plans load (defaults to trial id)
+  max_seats: '10',
+  seats: '1',
   city: '',
   notes: '',
 };
@@ -59,10 +61,48 @@ export default function AddOrganisationModal({
   const [saving, setSaving] = useState(false);
   const [error, setError]  = useState<string | null>(null);
 
+  // ── Plans from API ──────────────────────────────────────────────────────────
+  const [plans, setPlans]           = useState<SubscriptionPlan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [plansError, setPlansError] = useState<string | null>(null);
+
+  const fetchPlans = async () => {
+    setPlansLoading(true);
+    setPlansError(null);
+    try {
+      const p = await getSubscriptionPlans();
+      setPlans(p);
+      // Default to trial plan if present and no plan selected yet
+      setForm((f) => {
+        if (f.license_plan) return f;
+        const trial = p.find((x) => x.id === 'trial');
+        return { ...f, license_plan: trial ? trial.id : (p[0]?.id ?? '') };
+      });
+    } catch {
+      setPlansError('Failed to load plans');
+    } finally {
+      setPlansLoading(false);
+    }
+  };
+
+  // Fetch plans when modal first opens
+  useEffect(() => {
+    if (isOpen && plans.length === 0) fetchPlans();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
   const isFacility    = isFacilityType(form.type);
   const isInstitution = !isFacility && form.type !== '';
 
-  const reset = () => { setForm({ ...EMPTY }); setSaving(false); setError(null); };
+  // Selected plan object (for sending name to API)
+  const selectedPlan = plans.find((p) => p.id === form.license_plan);
+
+  const reset = () => {
+    const trial = plans.find((p) => p.id === 'trial');
+    setForm({ ...EMPTY, license_plan: trial ? trial.id : (plans[0]?.id ?? '') });
+    setSaving(false);
+    setError(null);
+  };
 
   useEffect(() => {
     if (!isOpen) reset();
@@ -80,9 +120,13 @@ export default function AddOrganisationModal({
     if (!form.region)       { setError('Region is required.'); return; }
     if (!form.contact_name.trim()) { setError('Admin contact name is required.'); return; }
     if (!form.email.trim()) { setError('Admin email is required.'); return; }
+    if (!selectedPlan)      { setError('Please select a subscription plan.'); return; }
 
     setSaving(true);
     setError(null);
+
+    // Send plan name (not id) — that's what the backend institutions/facilities API expects
+    const planName = selectedPlan.name;
 
     try {
       if (isFacility) {
@@ -93,8 +137,8 @@ export default function AddOrganisationModal({
           contact_name: form.contact_name.trim(),
           email:        form.email.trim(),
           phone:        form.phone.trim() || undefined,
-          license_plan: form.license_plan || '30-day Free Trial',
-          seats:        form.max_seats ? Number(form.max_seats) : 10,
+          license_plan: planName,
+          seats:        form.max_seats ? Number(form.max_seats) : (selectedPlan.max_seats ?? 10),
           notes:        form.notes.trim() || undefined,
         });
         onToast(`${form.name} registered as a clinical facility — onboarding email sent`, 'success');
@@ -106,8 +150,8 @@ export default function AddOrganisationModal({
           contact_name: form.contact_name.trim(),
           email:        form.email.trim(),
           phone:        form.phone.trim() || undefined,
-          license_plan: form.license_plan || '30-day Free Trial',
-          seats:        form.seats ? Number(form.seats) : 1,
+          license_plan: planName,
+          seats:        form.seats ? Number(form.seats) : (selectedPlan.max_seats ?? 1),
           notes:        form.notes.trim() || undefined,
         });
         onToast(`${form.name} registered as an institution — onboarding email sent`, 'success');
@@ -266,14 +310,41 @@ export default function AddOrganisationModal({
             </div>
 
             <div className="field">
-              <label className="lbl">License Plan</label>
-              <select
-                className="sel"
-                value={form.license_plan}
-                onChange={(e) => set('license_plan', e.target.value)}
-              >
-                {LICENSE_PLANS.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
+              <label className="lbl">Subscription Plan</label>
+              {plansLoading ? (
+                <div style={{ padding: '10px 13px', fontSize: '.82rem', color: 'var(--gray)',
+                  background: 'var(--color-primary-light)', border: '1px solid var(--blue-border)',
+                  borderRadius: '3px', minHeight: '44px', display: 'flex', alignItems: 'center' }}>
+                  Loading plans…
+                </div>
+              ) : plansError ? (
+                <div>
+                  <div style={{ padding: '9px 12px', background: 'var(--red-pale)',
+                    border: '1px solid var(--red-mist)', borderRadius: '3px',
+                    fontSize: '.78rem', color: 'var(--red)', marginBottom: '6px' }}>
+                    {plansError}
+                  </div>
+                  <button type="button" className="btn btn-ghost"
+                    style={{ fontSize: '.76rem', padding: '6px 12px' }}
+                    onClick={fetchPlans}>
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <select
+                  className="sel"
+                  value={form.license_plan}
+                  onChange={(e) => set('license_plan', e.target.value)}
+                  disabled={plans.length === 0}
+                >
+                  {plans.length === 0 && <option value="">No plans available</option>}
+                  {plans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}{p.price_monthly > 0 ? ` — GH₵${p.price_monthly}/mo` : ' — Free'}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {/* Facility-only: Max Seats + Notes */}
@@ -354,7 +425,7 @@ export default function AddOrganisationModal({
             <button
               className="btn btn-red"
               onClick={handleSubmit}
-              disabled={saving}
+              disabled={saving || plansLoading || !!plansError || !form.license_plan}
             >
               {saving ? 'Registering…' : submitLabel}
             </button>

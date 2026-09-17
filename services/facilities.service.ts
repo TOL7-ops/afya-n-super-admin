@@ -30,9 +30,5 @@ export async function suspendFacilityLegacy(
   return updateInstitutionStatus(facilityId, active);
 }
 
-// License helpers now in licenses.service.ts — re-export for old callers
-export { renewLicense, sendLicenseReminder as sendRenewalReminder } from './licenses.service';
-
-import { renewLicense as _rl, sendLicenseReminder as _srl } from './licenses.service';
-void _rl;
-void _srl;
+// License helpers — re-export for any old callers
+export { renewSubscription as renewLicense, sendLicenseReminder as sendRenewalReminder } from './licenses.service';

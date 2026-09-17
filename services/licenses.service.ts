@@ -26,9 +26,32 @@ import type {
   LicenseItem,
   IssueLicensePayload,
   ConvertTrialPayload,
+  SubscriptionPlan,
 } from '@/types/api';
 
-// ─── Response types ────────────────────────────────────────────────────────────
+// ─── Module-level plan cache (fetch once, reuse) ──────────────────────────────
+let _plansCache: SubscriptionPlan[] | null = null;
+
+/**
+ * GET /api/v1/subscriptions/plans
+ * Fetches available subscription plans. Cached for the lifetime of the page session.
+ */
+export async function getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
+  if (_plansCache) return _plansCache;
+  const res = await api.get<unknown>('/api/v1/subscriptions/plans');
+  const raw = res.data;
+  const plans: SubscriptionPlan[] = Array.isArray(raw)
+    ? (raw as SubscriptionPlan[])
+    : ((raw as Record<string, unknown>)?.['plans'] as SubscriptionPlan[] | undefined) ?? [];
+  // Filter out Enterprise — not a supported plan
+  _plansCache = plans.filter((p) => p.id.toLowerCase() !== 'enterprise' && p.name.toLowerCase() !== 'enterprise');
+  return _plansCache;
+}
+
+/** Clear the plan cache (useful for testing or forced refresh) */
+export function clearPlansCache(): void { _plansCache = null; }
+
+
 
 export interface SubscriptionsResponse {
   total_active: number;
@@ -64,7 +87,7 @@ export interface IssueSubscriptionParams {
 // ─── Low-level action dispatcher (internal — not exported to components) ───────
 async function _performAction(
   id: string,
-  action: 'RENEW' | 'SEND_REMINDER' | 'SEND_RENEWAL_EMAIL' | 'CONVERT_TRIAL',
+  action: 'RENEW' | 'SEND_REMINDER' | 'SEND_RENEWAL_EMAIL' | 'CONVERT_TRIAL' | 'UPGRADE',
   payload?: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const res = await api.post<Record<string, unknown>>(
@@ -192,36 +215,20 @@ export async function renewSubscription(params: RenewSubscriptionParams): Promis
 
 /**
  * Upgrade a subscription to a different plan.
+ * POST /api/v1/super-admin/subscriptions/{id}/action  { action: "UPGRADE", plan, seats, payment_method }
  *
- * ⚠ BACKEND PENDING: No dedicated upgrade endpoint exists yet.
- * Current workaround: issues a NEW subscription with the target plan.
- * When backend adds PATCH /subscriptions/{id} or POST .../action { action: "UPGRADE" },
- * update ONLY this function — no UI component needs to change.
- *
- * TODO: Replace body of this function when backend is ready.
+ * When the backend ships a dedicated PATCH endpoint, replace only this function body.
  */
 export async function upgradeSubscription(params: UpgradeSubscriptionParams): Promise<void> {
-  // --- Replace this block when backend provides a proper upgrade endpoint ---
-  // Future implementation (example):
-  //   await api.patch(`/api/v1/super-admin/subscriptions/${params.subscriptionId}`, {
-  //     plan: params.targetPlan,
-  //     seats: params.seats,
-  //     payment_method: params.paymentMethod,
-  //   });
-  // -------------------------------------------------------------------------
-
-  // Interim: issue a new subscription row with the target plan
-  console.log('[upgradeSubscription] Workaround: issuing new subscription',
+  console.log('[upgradeSubscription]',
+    '| sub:', params.subscriptionId,
     '| org:', params.organizationName,
-    '| from sub:', params.subscriptionId,
     '| to plan:', params.targetPlan,
   );
-  await api.post('/api/v1/super-admin/subscriptions', {
-    institution_name: params.organizationName.trim(),
-    plan:             params.targetPlan,
-    start_date:       new Date().toISOString(),
-    seats:            params.seats ?? 10,
-    payment_method:   params.paymentMethod ?? 'Bank Transfer',
+  await _performAction(params.subscriptionId, 'UPGRADE', {
+    plan:           params.targetPlan,
+    seats:          params.seats ?? undefined,
+    payment_method: params.paymentMethod ?? 'Bank Transfer',
   });
 }
 

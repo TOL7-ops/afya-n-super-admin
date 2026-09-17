@@ -564,4 +564,4 @@ Completely new endpoints the backend needs to build:
 ---
 
 *This file is auto-generated from a full codebase scan. Re-run the analysis after each sprint to track progress.*
-*Backend: `https://afya-backend-production.up.railway.app` | Frontend: Next.js 16 App Router*
+*Backend: `https://afya-backend-staging.up.railway.app` | Frontend: Next.js 16 App Router*

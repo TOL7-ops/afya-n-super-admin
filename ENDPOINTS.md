@@ -1,9 +1,9 @@
 # ENDPOINTS.md — Afya Super Admin
 
 > **Single source of truth** for frontend-to-backend integration.
-> Backend: `https://afya-backend-production.up.railway.app`
-> Swagger: `https://afya-backend-production.up.railway.app/docs`
-> OpenAPI JSON: `https://afya-backend-production.up.railway.app/api/v1/openapi.json`
+> Backend: `https://afya-backend-staging.up.railway.app`
+> Swagger: `https://afya-backend-staging.up.railway.app/docs`
+> OpenAPI JSON: `https://afya-backend-staging.up.railway.app/api/v1/openapi.json`
 > Auth scheme: **Bearer token** (`Authorization: Bearer <access_token>`)
 
 ---

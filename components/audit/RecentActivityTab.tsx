@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { AgentActivityLogResponse } from '@/types/api';
 
 interface RecentActivityTabProps {
@@ -13,19 +13,13 @@ interface RecentActivityTabProps {
 
 // ─── Badge config ─────────────────────────────────────────────────────────────
 interface BadgeCfg {
-  label: string;
-  bg: string;
-  color: string;
-  border: string;
-  dot: string;
+  label: string; bg: string; color: string; border: string; dot: string;
   severity: 'Info' | 'Warning' | 'Critical';
-  severityColor: string;
-  severityBg: string;
+  severityColor: string; severityBg: string;
 }
 
 function getBadge(action: string): BadgeCfg {
   const a = action.toUpperCase().replace(/[\s-]/g, '_');
-
   if (a.includes('LOGIN') || a.includes('AUTH') || a.includes('SIGN'))
     return { label: 'Login',        bg: '#eef9f3', color: '#1A7A4A', border: '#9DD0B8', dot: '#1A7A4A', severity: 'Info',     severityColor: '#1d4ed8', severityBg: '#dbeafe' };
   if (a.includes('PATIENT') || a.includes('REGISTER_PATIENT') || a.includes('CLINICAL') || a.includes('INTAKE') || a.includes('BP'))
@@ -42,7 +36,6 @@ function getBadge(action: string): BadgeCfg {
     return { label: 'Critical',     bg: '#fdf2f4', color: '#C41E3A', border: '#F5D5DB', dot: '#C41E3A', severity: 'Critical', severityColor: '#991b1b', severityBg: '#fee2e2' };
   if (a.includes('EXPORT') || a.includes('REPORT') || a.includes('DOWNLOAD'))
     return { label: 'Export',       bg: '#eef9f3', color: '#1A7A4A', border: '#9DD0B8', dot: '#1A7A4A', severity: 'Info',     severityColor: '#1d4ed8', severityBg: '#dbeafe' };
-
   return   { label: 'System',      bg: '#f2eff4', color: '#7A717A', border: '#d4cfd8', dot: '#7A717A', severity: 'Info',     severityColor: '#1d4ed8', severityBg: '#dbeafe' };
 }
 
@@ -78,268 +71,217 @@ const ACTION_FILTERS = [
   { value: 'EXPORT',          label: 'Exports' },
 ];
 
-export default function RecentActivityTab({
-  entries,
-  loading,
-  onExport,
-  onRefresh,
-  refreshing,
-}: RecentActivityTabProps) {
-  const [search, setSearch]         = useState('');
-  const [actionFilter, setAction]   = useState('all');
-  const [expanded, setExpanded]     = useState<Set<string>>(new Set());
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    setMobile(mq.matches);
+    const h = (e: MediaQueryListEvent) => setMobile(e.matches);
+    mq.addEventListener('change', h);
+    return () => mq.removeEventListener('change', h);
+  }, []);
+  return mobile;
+}
+
+// Shared label pill
+const MONO: React.CSSProperties = { fontFamily: "'JetBrains Mono',monospace", fontSize: '.56rem', letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--gray)' };
+
+export default function RecentActivityTab({ entries, loading, onExport, onRefresh, refreshing }: RecentActivityTabProps) {
+  const isMobile = useIsMobile();
+  const [search, setSearch]       = useState('');
+  const [actionFilter, setAction] = useState('all');
+  const [expanded, setExpanded]   = useState<Set<string>>(new Set());
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return entries.filter((log) => {
-      const matchSearch =
-        !q ||
-        (log.agent_name ?? '').toLowerCase().includes(q) ||
-        (log.action ?? '').toLowerCase().includes(q) ||
-        (log.details ?? '').toLowerCase().includes(q);
-      const matchAction =
-        actionFilter === 'all' ||
-        (log.action ?? '').toUpperCase().includes(actionFilter);
+      const matchSearch = !q || (log.agent_name ?? '').toLowerCase().includes(q) || (log.action ?? '').toLowerCase().includes(q) || (log.details ?? '').toLowerCase().includes(q);
+      const matchAction = actionFilter === 'all' || (log.action ?? '').toUpperCase().includes(actionFilter);
       return matchSearch && matchAction;
     });
   }, [entries, search, actionFilter]);
 
   const toggleExpand = (id: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    setExpanded((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   };
 
   if (loading && entries.length === 0) {
     return (
       <div style={{ padding: '48px', textAlign: 'center' }}>
         <div style={{ fontSize: '2rem', marginBottom: '12px' }}>⏳</div>
-        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.72rem', color: 'var(--gray)' }}>
-          Loading activity…
-        </div>
+        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.72rem', color: 'var(--gray)' }}>Loading activity…</div>
       </div>
     );
   }
 
   return (
     <div>
-      {/* Toolbar */}
+      {/* ── Toolbar ── */}
       <div style={{
         display: 'flex', gap: '10px', padding: '14px 20px',
         borderBottom: '1px solid var(--gray-lt)', background: 'var(--off)',
         flexWrap: 'wrap', alignItems: 'center',
       }}>
-        {/* Search */}
-        <div className="search-wrap" style={{ flex: 1, minWidth: '200px' }}>
-          <svg className="search-ico" width="14" height="14" viewBox="0 0 24 24"
-            fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <div className="search-wrap" style={{ flex: '1 1 180px', minWidth: isMobile ? '100%' : '180px' }}>
+          <svg className="search-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
-          <input className="search-input" type="text" placeholder="Search by user, action, or details…"
-            value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input className="search-input" type="text" placeholder="Search by user, action, or details…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
-        {/* Action filter */}
-        <select className="filter-sel" value={actionFilter} onChange={(e) => setAction(e.target.value)}>
+        <select className="filter-sel" style={{ flex: isMobile ? '1 1 100%' : '0 0 auto' }} value={actionFilter} onChange={(e) => setAction(e.target.value)}>
           {ACTION_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
         </select>
-        {/* Export */}
-        <button className="btn btn-ghost" onClick={onExport}>Export ↓</button>
+        <button className="btn btn-ghost" style={{ flex: isMobile ? '1 1 100%' : '0 0 auto', justifyContent: 'center', minHeight: '44px' }} onClick={onExport}>Export ↓</button>
       </div>
 
-      {/* Table header */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '28px 180px 1fr 100px 90px 32px',
-        gap: '10px',
-        padding: '8px 20px',
-        background: 'var(--off)',
-        borderBottom: '1px solid var(--gray-lt)',
-        fontFamily: "'JetBrains Mono',monospace",
-        fontSize: '.56rem', letterSpacing: '.12em',
-        textTransform: 'uppercase' as const,
-        color: 'var(--color-primary)',
-      }}>
-        <span />
-        <span>User</span>
-        <span>Action / Details</span>
-        <span>Category</span>
-        <span style={{ textAlign: 'right' }}>Time</span>
-        <span />
-      </div>
-
-      {/* Rows */}
-      {filtered.length === 0 ? (
+      {/* ── Empty state ── */}
+      {filtered.length === 0 && !loading && (
         <div style={{ padding: '56px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: '2.4rem', marginBottom: '12px' }}>📭</div>
-          <div style={{ fontWeight: 600, fontSize: '.88rem', color: 'var(--ink)', marginBottom: '4px' }}>
-            No activity recorded yet.
-          </div>
+          <div style={{ fontWeight: 600, fontSize: '.88rem', color: 'var(--ink)', marginBottom: '4px' }}>No activity recorded yet.</div>
           <div style={{ fontSize: '.76rem', color: 'var(--gray)' }}>
             {search || actionFilter !== 'all' ? 'Try adjusting your filters.' : 'Activity will appear here as events are logged.'}
           </div>
         </div>
-      ) : (
-        filtered.map((log, i) => {
-          const id     = String(log.id ?? i);
-          const action = log.action ?? '';
-          const agent  = log.agent_name ?? 'System';
-          const badge  = getBadge(action);
-          const isOpen = expanded.has(id);
+      )}
 
-          return (
-            <div
-              key={id}
-              style={{
-                borderBottom: i < filtered.length - 1 ? '1px solid var(--gray-xlt)' : 'none',
+      {/* ── MOBILE: card layout ── */}
+      {isMobile && filtered.length > 0 && (
+        <div>
+          {filtered.map((log, i) => {
+            const id     = String(log.id ?? i);
+            const action = log.action ?? '';
+            const agent  = log.agent_name ?? 'System';
+            const badge  = getBadge(action);
+            const isOpen = expanded.has(id);
+            return (
+              <div key={id} style={{
+                borderBottom: '1px solid var(--gray-xlt)',
                 background: isOpen ? 'rgba(7,72,128,.03)' : 'transparent',
-                transition: 'background .15s',
-              }}
-            >
-              {/* Main row */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '28px 180px 1fr 100px 90px 32px',
-                gap: '10px',
-                padding: '11px 20px',
-                alignItems: 'center',
-                cursor: 'pointer',
-              }}
-                onClick={() => toggleExpand(id)}
-              >
-                {/* Dot */}
-                <div style={{
-                  width: '8px', height: '8px', borderRadius: '50%',
-                  background: badge.dot, margin: '0 auto',
-                }} />
-
-                {/* User */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                  <div style={{
-                    width: '26px', height: '26px', borderRadius: '50%',
-                    background: 'var(--color-primary)', color: 'white',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '.6rem', fontWeight: 700, flexShrink: 0,
-                  }}>
+              }}>
+                {/* Card header — full row tappable */}
+                <div
+                  role="button"
+                  onClick={() => toggleExpand(id)}
+                  style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', gap: '12px', alignItems: 'flex-start', minHeight: '44px' }}
+                >
+                  {/* Avatar */}
+                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--color-primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '.65rem', fontWeight: 700, flexShrink: 0 }}>
                     {initials(agent)}
                   </div>
-                  <span style={{
-                    fontSize: '.78rem', fontWeight: 500, color: 'var(--ink)',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>
-                    {agent}
-                  </span>
-                </div>
-
-                {/* Action + details */}
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 500, fontSize: '.78rem', color: 'var(--ink-mid)' }}>
-                    {humanLabel(action)}
+                  {/* Content */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: 600, fontSize: '.84rem', color: 'var(--ink)' }}>{agent}</span>
+                      <span style={{ fontSize: '.63rem', fontWeight: 600, padding: '2px 8px', borderRadius: '999px', background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`, whiteSpace: 'nowrap' }}>{badge.label}</span>
+                    </div>
+                    <div style={{ fontSize: '.78rem', color: 'var(--ink-mid)', marginBottom: '2px' }}>{humanLabel(action)}</div>
+                    {log.details && !isOpen && (
+                      <div style={{ fontSize: '.72rem', color: 'var(--gray)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{log.details}</div>
+                    )}
+                    <div style={{ fontSize: '.68rem', color: 'var(--gray)', marginTop: '4px', fontFamily: "'JetBrains Mono',monospace" }}>{fmtTime(log.timestamp)}</div>
                   </div>
-                  {log.details && !isOpen && (
-                    <div style={{
-                      fontSize: '.7rem', color: 'var(--gray)', marginTop: '2px',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {log.details}
+                  {/* Chevron */}
+                  <div style={{ color: 'var(--gray)', fontSize: '.8rem', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s', flexShrink: 0, paddingTop: '4px' }}>▾</div>
+                </div>
+                {/* Expanded detail */}
+                {isOpen && (
+                  <div style={{ padding: '12px 16px 16px', background: 'rgba(7,72,128,.035)', borderTop: '1px solid var(--blue-border)' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div><div style={MONO}>Action</div><div style={{ fontSize: '.78rem', color: 'var(--ink)', fontWeight: 500, marginTop: '3px' }}>{humanLabel(action)}</div></div>
+                      <div>
+                        <div style={MONO}>Severity</div>
+                        <span style={{ fontSize: '.68rem', fontWeight: 600, padding: '2px 9px', borderRadius: '999px', background: badge.severityBg, color: badge.severityColor, display: 'inline-block', marginTop: '3px' }}>{badge.severity}</span>
+                      </div>
+                      <div><div style={MONO}>Time</div><div style={{ fontSize: '.72rem', color: 'var(--ink-mid)', fontFamily: "'JetBrains Mono',monospace", marginTop: '3px' }}>{log.timestamp ? new Date(log.timestamp).toLocaleString('en-GB') : '—'}</div></div>
+                      {log.id && <div><div style={MONO}>Event ID</div><div style={{ fontSize: '.66rem', color: 'var(--gray)', fontFamily: "'JetBrains Mono',monospace", marginTop: '3px', wordBreak: 'break-all' }}>{log.id}</div></div>}
+                    </div>
+                    {log.details && (
+                      <div style={{ marginTop: '12px' }}>
+                        <div style={MONO}>Details</div>
+                        <div style={{ fontSize: '.78rem', color: 'var(--ink-mid)', lineHeight: 1.5, marginTop: '3px', wordBreak: 'break-word' }}>{log.details}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── DESKTOP: table layout ── */}
+      {!isMobile && filtered.length > 0 && (
+        <>
+          {/* Table header — nowrap enforced */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: '28px 200px 1fr 110px 100px 32px',
+            gap: '10px', padding: '8px 20px', background: 'var(--off)',
+            borderBottom: '1px solid var(--gray-lt)',
+            fontFamily: "'JetBrains Mono',monospace", fontSize: '.56rem',
+            letterSpacing: '.12em', textTransform: 'uppercase' as const,
+            color: 'var(--color-primary)',
+          }}>
+            <span />
+            <span style={{ whiteSpace: 'nowrap' }}>User</span>
+            <span style={{ whiteSpace: 'nowrap' }}>Action / Details</span>
+            <span style={{ whiteSpace: 'nowrap' }}>Category</span>
+            <span style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>Time</span>
+            <span />
+          </div>
+
+          <div>
+            {filtered.map((log, i) => {
+              const id     = String(log.id ?? i);
+              const action = log.action ?? '';
+              const agent  = log.agent_name ?? 'System';
+              const badge  = getBadge(action);
+              const isOpen = expanded.has(id);
+              return (
+                <div key={id} style={{ borderBottom: i < filtered.length - 1 ? '1px solid var(--gray-xlt)' : 'none', background: isOpen ? 'rgba(7,72,128,.03)' : 'transparent', transition: 'background .15s' }}>
+                  <div
+                    style={{ display: 'grid', gridTemplateColumns: '28px 200px 1fr 110px 100px 32px', gap: '10px', padding: '13px 20px', alignItems: 'center', cursor: 'pointer', minHeight: '44px' }}
+                    onClick={() => toggleExpand(id)}
+                  >
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: badge.dot, margin: '0 auto' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                      <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--color-primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '.6rem', fontWeight: 700, flexShrink: 0 }}>{initials(agent)}</div>
+                      <span style={{ fontSize: '.78rem', fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent}</span>
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 500, fontSize: '.78rem', color: 'var(--ink-mid)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{humanLabel(action)}</div>
+                      {log.details && !isOpen && <div style={{ fontSize: '.7rem', color: 'var(--gray)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{log.details}</div>}
+                    </div>
+                    <div><span style={{ fontSize: '.63rem', fontWeight: 600, padding: '2px 8px', borderRadius: '999px', background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`, whiteSpace: 'nowrap' }}>{badge.label}</span></div>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.64rem', color: 'var(--gray)', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtTime(log.timestamp)}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gray)', fontSize: '.7rem', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>▾</div>
+                  </div>
+                  {isOpen && (
+                    <div style={{ padding: '12px 20px 14px 68px', background: 'rgba(7,72,128,.035)', borderTop: '1px solid var(--blue-border)' }}>
+                      <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
+                        <div><div style={MONO}>Action</div><div style={{ fontSize: '.78rem', color: 'var(--ink)', fontWeight: 500 }}>{humanLabel(action)}</div></div>
+                        {log.details && <div style={{ flex: 1, minWidth: 0 }}><div style={MONO}>Details</div><div style={{ fontSize: '.78rem', color: 'var(--ink-mid)', lineHeight: 1.5, wordBreak: 'break-word' }}>{log.details}</div></div>}
+                        <div><div style={MONO}>Severity</div><span style={{ fontSize: '.68rem', fontWeight: 600, padding: '2px 9px', borderRadius: '999px', background: badge.severityBg, color: badge.severityColor }}>{badge.severity}</span></div>
+                        <div><div style={MONO}>Timestamp</div><div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.7rem', color: 'var(--ink-mid)' }}>{log.timestamp ? new Date(log.timestamp).toLocaleString('en-GB') : '—'}</div></div>
+                        <div><div style={MONO}>Event ID</div><div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.68rem', color: 'var(--gray)' }}>{log.id}</div></div>
+                      </div>
                     </div>
                   )}
                 </div>
-
-                {/* Category badge */}
-                <div>
-                  <span style={{
-                    fontSize: '.63rem', fontWeight: 600, padding: '2px 8px',
-                    borderRadius: '999px',
-                    background: badge.bg, color: badge.color,
-                    border: `1px solid ${badge.border}`,
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {badge.label}
-                  </span>
-                </div>
-
-                {/* Time */}
-                <div style={{
-                  fontFamily: "'JetBrains Mono',monospace", fontSize: '.64rem',
-                  color: 'var(--gray)', textAlign: 'right', whiteSpace: 'nowrap',
-                }}>
-                  {fmtTime(log.timestamp)}
-                </div>
-
-                {/* Expand chevron */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'var(--gray)', fontSize: '.7rem',
-                  transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s',
-                }}>
-                  ▾
-                </div>
-              </div>
-
-              {/* Expanded detail panel */}
-              {isOpen && (
-                <div style={{
-                  padding: '12px 20px 14px 68px',
-                  background: 'rgba(7,72,128,.035)',
-                  borderTop: '1px solid var(--blue-border)',
-                }}>
-                  <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
-                    <div>
-                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.54rem', letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--gray)', marginBottom: '3px' }}>Action</div>
-                      <div style={{ fontSize: '.78rem', color: 'var(--ink)', fontWeight: 500 }}>{humanLabel(action)}</div>
-                    </div>
-                    {log.details && (
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.54rem', letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--gray)', marginBottom: '3px' }}>Details</div>
-                        <div style={{ fontSize: '.78rem', color: 'var(--ink-mid)', lineHeight: 1.5, wordBreak: 'break-word' }}>{log.details}</div>
-                      </div>
-                    )}
-                    <div>
-                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.54rem', letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--gray)', marginBottom: '3px' }}>Severity</div>
-                      <span style={{
-                        fontSize: '.68rem', fontWeight: 600, padding: '2px 9px', borderRadius: '999px',
-                        background: badge.severityBg, color: badge.severityColor,
-                      }}>
-                        {badge.severity}
-                      </span>
-                    </div>
-                    <div>
-                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.54rem', letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--gray)', marginBottom: '3px' }}>Timestamp</div>
-                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.7rem', color: 'var(--ink-mid)' }}>
-                        {log.timestamp ? new Date(log.timestamp).toLocaleString('en-GB') : '—'}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.54rem', letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--gray)', marginBottom: '3px' }}>Event ID</div>
-                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.68rem', color: 'var(--gray)' }}>{log.id}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })
+              );
+            })}
+          </div>
+        </>
       )}
 
-      {/* Footer count */}
+      {/* Footer */}
       {filtered.length > 0 && (
-        <div style={{
-          padding: '10px 20px', borderTop: '1px solid var(--gray-lt)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
+        <div style={{ padding: '10px 20px', borderTop: '1px solid var(--gray-lt)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '.62rem', color: 'var(--gray)' }}>
-            {filtered.length} event{filtered.length !== 1 ? 's' : ''}
-            {filtered.length !== entries.length ? ` (filtered from ${entries.length})` : ''}
+            {filtered.length} event{filtered.length !== 1 ? 's' : ''}{filtered.length !== entries.length ? ` (filtered from ${entries.length})` : ''}
           </span>
           {(search || actionFilter !== 'all') && (
-            <button
-              onClick={() => { setSearch(''); setAction('all'); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '.72rem', color: 'var(--color-primary)' }}
-            >
-              Clear filters
-            </button>
+            <button onClick={() => { setSearch(''); setAction('all'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '.72rem', color: 'var(--color-primary)' }}>Clear filters</button>
           )}
         </div>
       )}

@@ -1,6 +1,6 @@
 # Afya Super Admin — Implementation Audit
 > Generated: June 2026 | Reflects actual codebase state after all frontend work
-> Backend: `https://afya-backend-production.up.railway.app`
+> Backend: `https://afya-backend-staging.up.railway.app`
 
 ---
 

@@ -20,7 +20,7 @@ import requests
 import json
 import time
 
-BASE_URL = "https://afya-backend-production.up.railway.app"
+BASE_URL = "https://afya-backend-staging.up.railway.app"
 EMAIL    = "admin@afya.com"
 PASSWORD = "Password123"
 

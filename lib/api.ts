@@ -11,7 +11,7 @@ import axios from 'axios';
 import { getAccessToken } from '@/services/authService';
 
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? 'https://afya-backend-production.up.railway.app';
+  process.env.NEXT_PUBLIC_API_URL ?? 'https://afya-backend-staging.up.railway.app';
 
 /**
  * In the browser, use relative URLs (/api/v1/...) so requests go through

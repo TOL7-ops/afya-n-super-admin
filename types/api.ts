@@ -333,7 +333,18 @@ export interface UserResponse {
   [key: string]: unknown;
 }
 
-// ─── Demo Requests ────────────────────────────────────────────────────────────
+// ─── Subscription Plans ────────────────────────────────────────────────────────
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  price_monthly: number;
+  max_seats: number | null;
+  max_patients: number | null;
+  features: string[];
+  duration_days: number;
+}
+
+
 export type DemoRequestStatus = 'Pending' | 'Approved' | 'Rejected';
 
 /**

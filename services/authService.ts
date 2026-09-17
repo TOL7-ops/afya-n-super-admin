@@ -14,7 +14,7 @@ import axios from 'axios';
 import type { UserResponse } from '@/types/api';
 
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? 'https://afya-backend-production.up.railway.app';
+  process.env.NEXT_PUBLIC_API_URL ?? 'https://afya-backend-staging.up.railway.app';
 
 /**
  * In the browser, use relative URLs so requests are proxied by Next.js (no CORS).
